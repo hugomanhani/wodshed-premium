@@ -27,6 +27,8 @@ function defaultState() {
     conditioningStreak: 0,  // sessions since last benchmark, for cadence suggestion
     today: null,            // cached generated plan for the current date
     lastPatternIndex: {},   // focus -> index into rotation pointer (deliberate sub-focus rotation)
+    execState: null,        // in-progress section snapshot, so a reload mid-set doesn't lose the clock
+    soundOn: true,
   };
 }
 

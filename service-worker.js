@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wodshed-v1';
+const CACHE_NAME = 'wodshed-v2';
 const SHELL = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   './js/storage.js',
   './js/engine.js',
   './js/timer.js',
+  './js/feedback.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

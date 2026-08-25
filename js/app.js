@@ -11,14 +11,19 @@ const ICON = {
   home: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>',
   history: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>',
   gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.7a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10.5a1.7 1.7 0 0 0 1-1.55V4.3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10.5a1.7 1.7 0 0 0 1.55 1H19.7a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>',
+  sound: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 0 1 0 8"/></svg>',
+  muted: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>',
 };
 
-const SECTION_TITLES = { warmup: 'Warm-Up', skill: 'Skill', wod: 'WOD', core: 'Extra Core' };
-const RATING_LABEL = { easy: 'Easy', right: 'Right', hard: 'Hard' };
+// Canonical copy, kept in one place so labels stay identical everywhere they
+// appear (section cards, exec header, rating screen, history, summary).
+const SECTION_TITLES = { warmup: 'Warm-Up', skill: 'Skill', wod: 'WOD', core: 'Core' };
+const RATING_LABEL = { easy: 'Easy', right: 'Just Right', hard: 'Too Hard' };
 const RATING_TAG_CLASS = { easy: 'tag-good', right: 'tag-neutral', hard: 'tag-warn' };
+const FOCUS_ACCENT = { strength: 'violet', weightlifting: 'gold', gymnastics: 'teal', accessory: 'blue', conditioning: 'coral' };
 
 const UI = {
-  screen: 'boot', tab: 'today', execSection: null, timer: null, dialog: null,
+  screen: 'boot', tab: 'today', execSection: null, timer: null, timerKind: null, dialog: null, leadIn: null,
   warmupChecks: [], skillSetIndex: 0, skillWeight: 0, skillResting: false, skillRoundIndex: 1,
   bRoundIndex: 1, wodElapsed: 0, wodStepIndex: 0, wodRftRound: 0, wodAmrapRounds: 0, wodAmrapReps: 0,
   coreRound: 1, corePhase: 'work', coreChecks: [], pendingResult: null, running: false,
@@ -28,6 +33,11 @@ function app() { return document.getElementById('app'); }
 function esc(s) { return String(s); }
 function byId(id) { return document.getElementById(id); }
 
+// Screen swaps always paint synchronously — the async View Transitions API was tried
+// here for a cross-fade, but its callback only fires once the document is visible and
+// composited, so backgrounding mid-workout (locking the phone, switching apps) could
+// stall a pending screen change until the app was reopened. A timer app can't risk that;
+// the CSS fade-in on `.screen` gives most of the same polish with none of the hazard.
 function render() {
   const root = app();
   let html = '';
@@ -49,7 +59,7 @@ function renderShell(innerHtml, activeTab) {
 
 function renderBottomNav(active) {
   const item = (key, icon, label) => `<button class="nav-item ${active === key ? 'active' : ''}" onclick="App.goTab('${key}')">${icon}<span>${label}</span></button>`;
-  return `<div class="bottomnav">${item('today', ICON.home, 'Today')}${item('history', ICON.history, 'History')}${item('equipment', ICON.gear, 'Equipment')}</div>`;
+  return `<nav class="bottomnav">${item('today', ICON.home, 'Today')}${item('history', ICON.history, 'History')}${item('equipment', ICON.gear, 'Equipment')}</nav>`;
 }
 
 function infoBtn(key) { return `<button class="info-btn" onclick="App.showInfo('${key}')">i</button>`; }
@@ -68,9 +78,13 @@ function renderDialog() {
 
 // ─── Onboarding / Equipment picker ─────────────────────────────────────────
 
+const PRESET_ORDER = ['fullbox', 'garage', 'minimal', 'bodyweight'];
+
 function equipmentPickerHtml() {
   const equip = Store.state.equipment;
-  const presetChips = Object.keys(EQUIPMENT_PRESETS).map(key => {
+  const total = ALL_EQUIPMENT.length;
+
+  const presetChips = PRESET_ORDER.map(key => {
     const p = EQUIPMENT_PRESETS[key];
     const isActive = sameSet(equip, p.items);
     return `<div class="preset-chip ${isActive ? 'active' : ''}" onclick="App.applyPreset('${key}')">${p.label}</div>`;
@@ -86,7 +100,16 @@ function equipmentPickerHtml() {
     return `<div class="equip-group"><div class="equip-group-label">${g.label}</div>${rows}</div>`;
   }).join('');
 
-  return `<div class="preset-row">${presetChips}</div>${groups}`;
+  return `<div class="preset-row">${presetChips}</div>
+  <div class="equip-summary">
+    <span>${equip.length} of ${total} selected</span>
+    <div class="equip-summary-actions">
+      <button class="btn-link" onclick="App.setAllEquip(true)">Select all</button>
+      <span class="equip-summary-dot">·</span>
+      <button class="btn-link" onclick="App.setAllEquip(false)">None</button>
+    </div>
+  </div>
+  ${groups}`;
 }
 
 function sameSet(a, b) {
@@ -98,20 +121,28 @@ function sameSet(a, b) {
 function renderOnboarding() {
   return `<div class="onboard-wrap">
     <div class="onboard-header">
-      <h1>Welcome to WODshed</h1>
-      <p class="section-sub" style="padding:0;margin-top:8px">Tell us what you've got. Toggle individual items, or start from a preset — you can change this anytime.</p>
+      <div class="onboard-kicker">Welcome</div>
+      <h1>Set up your gym</h1>
+      <p class="section-sub" style="padding:0;margin-top:8px">We've switched everything on. Turn off anything you don't have — you can change this anytime from Equipment.</p>
     </div>
     <div class="scroll-content">${equipmentPickerHtml()}</div>
     <div class="onboard-footer">
-      <button class="btn btn-primary btn-block" onclick="App.finishOnboarding()">Continue</button>
+      <button class="btn btn-primary btn-block" onclick="App.finishOnboarding()">Build My First Session</button>
     </div>
   </div>`;
 }
 
 function renderEquipmentTab() {
   return `<div class="section-heading">Equipment</div>
-  <div class="section-sub">Changes apply to your next generated day.</div>
+  <div class="section-sub">Turn off anything you don't have. Changes apply to your next session.</div>
   ${equipmentPickerHtml()}
+  <div class="settings-block">
+    <div class="settings-row" onclick="App.toggleSound()">
+      <span>${Store.state.soundOn ? ICON.sound : ICON.muted}</span>
+      <span class="settings-row-label">Timer sounds &amp; vibration</span>
+      <div class="switch ${Store.state.soundOn ? 'on' : ''}"></div>
+    </div>
+  </div>
   <div style="padding:var(--space-4)">
     <button class="btn btn-danger btn-block" onclick="App.confirmReset()">Reset All Data</button>
   </div>`;
@@ -123,7 +154,7 @@ function renderToday() {
   const plan = Store.state.today;
   const order = ['warmup', 'skill', 'wod', 'core'];
   const doneCount = order.filter(s => plan.completed[s]).length;
-  const startLabel = doneCount === 0 ? 'Start Workout' : (doneCount === 4 ? 'Workout Done' : 'Resume Workout');
+  const startLabel = doneCount === 0 ? 'Start Session' : (doneCount === 4 ? 'Session Complete' : 'Resume Session');
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
   const segs = order.map(s => `<div class="progress-seg ${plan.completed[s] ? 'done' : ''}"></div>`).join('');
@@ -149,12 +180,12 @@ function renderToday() {
         <div class="date-label">${dateStr}</div>
         <h1>Today</h1>
       </div>
-      <span class="tag tag-accent">${FOCUS_LABELS[plan.focus].toUpperCase()} FOCUS</span>
+      <span class="tag tag-focus-${FOCUS_ACCENT[plan.focus]}">${FOCUS_LABELS[plan.focus].toUpperCase()} FOCUS</span>
     </div>
     <div class="progress-row">${segs}</div>
     <div style="padding:0 var(--space-4) var(--space-4)">
       <button class="btn btn-primary btn-block" ${doneCount === 4 ? 'disabled' : ''} onclick="App.startOrResume()">
-        ${doneCount < 4 ? ICON.play : ''} ${startLabel}
+        ${doneCount < 4 ? ICON.play : ICON.check} ${startLabel}
       </button>
     </div>
     ${banner}
@@ -174,7 +205,7 @@ function sectionCardHtml(section, plan) {
   } else if (section === 'wod') {
     title = 'WOD · ' + (plan.isBenchmark ? plan.benchmarkName : plan.wod.label);
     meta = `${plan.wod.badge} · ${plan.wod.movements}`;
-  } else { title = 'Extra Core'; meta = coreMetaLine(plan.core); }
+  } else { title = 'Core'; meta = coreMetaLine(plan.core); }
 
   const icon = done ? ICON.check : ICON.play;
   const iconCls = done ? 'section-icon done' : 'section-icon';
@@ -218,10 +249,21 @@ function playPauseBtn(big) {
   return `<button class="btn btn-primary btn-icon" style="${size}" onclick="App.toggleTimer()">${UI.running ? ICON.pause : ICON.play}</button>`;
 }
 
+function leadInHtml() {
+  const n = UI.leadIn;
+  const label = n === 0 ? 'GO' : String(n);
+  return `<div class="exec-body lead-in">
+    <div class="lead-in-num" key="${n}">${label}</div>
+    <div class="time-label">Get set</div>
+  </div>`;
+}
+
 function renderExecScreen() {
   const plan = Store.state.today;
   const section = UI.execSection;
   const title = SECTION_TITLES[section].toUpperCase();
+
+  if (UI.leadIn !== null) return `<div class="screen no-nav">${execHeader(title)}${leadInHtml()}</div>`;
 
   if (section === 'warmup') return `<div class="screen no-nav">${execHeader(title)}${renderWarmupBody(plan.warmup)}</div>`;
   if (section === 'skill') return `<div class="screen no-nav">${execHeader(title)}${renderSkillBody(plan.skill)}</div>`;
@@ -256,7 +298,7 @@ function renderSkillBody(skill) {
   if (skill.shape === 'A') {
     const reps = skill.scheme[UI.skillSetIndex];
     const isLast = UI.skillSetIndex + 1 >= skill.scheme.length;
-    const rest = UI.skillResting ? `<div class="card" style="width:100%;align-items:center;gap:8px;display:flex;flex-direction:column">
+    const rest = UI.skillResting ? `<div class="card rest-card">
         <div class="time-label">Rest</div>
         <div class="mid-time" id="restTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
         <button class="btn btn-ghost" onclick="App.skipRest()">Skip Rest</button>
@@ -290,7 +332,7 @@ function renderSkillBody(skill) {
 
   // shape C
   const moves = skill.moveNames.map(n => `<div class="move-line">${skill.reps} ${n}</div>`).join('');
-  const rest = UI.skillResting ? `<div class="card" style="width:100%;align-items:center;gap:8px;display:flex;flex-direction:column">
+  const rest = UI.skillResting ? `<div class="card rest-card">
       <div class="time-label">Rest</div>
       <div class="mid-time" id="restTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
       <button class="btn btn-ghost" onclick="App.skipRest()">Skip Rest</button>
@@ -314,7 +356,7 @@ function renderWodBody(wod, plan) {
     const step = wod.steps[UI.wodStepIndex];
     const isLast = UI.wodStepIndex + 1 >= wod.steps.length;
     return `<div class="exec-body">
-      <div class="card" style="width:100%"><div style="font-size:13px;color:var(--color-neutral-400)">${wod.movements}</div></div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="section-meta">ROUND ${UI.wodStepIndex + 1} / ${wod.steps.length} · ${wod.steps.join('–')}</div>
       <div class="big-time">${step}</div>
       <div class="mid-time" id="wodTime" style="color:var(--color-neutral-400)">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
@@ -328,7 +370,7 @@ function renderWodBody(wod, plan) {
   if (wod.format === 'rft') {
     const isLast = UI.wodRftRound + 1 >= wod.rounds;
     return `<div class="exec-body">
-      <div class="card" style="width:100%"><div style="font-size:13px;color:var(--color-neutral-400)">${wod.movements}</div></div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="section-meta">ROUND ${UI.wodRftRound + 1} / ${wod.rounds}</div>
       <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
       ${capTagHtml(UI.timer ? UI.timer.elapsedMs() : 0, wod.capSec)}
@@ -340,18 +382,18 @@ function renderWodBody(wod, plan) {
   }
   if (wod.format === 'fortime') {
     return `<div class="exec-body">
-      <div class="card" style="width:100%"><div style="font-size:13px;color:var(--color-neutral-400)">${wod.movements}</div></div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
       ${capTagHtml(UI.timer ? UI.timer.elapsedMs() : 0, wod.capSec)}
       <div class="action-row">
         ${playPauseBtn(false)}
-        <button class="btn btn-primary" style="flex:1" onclick="App.finishFortime()">Finish</button>
+        <button class="btn btn-primary" style="flex:1" onclick="App.finishFortime()">Finish WOD</button>
       </div>
     </div>`;
   }
   if (wod.format === 'amrap') {
     return `<div class="exec-body">
-      <div class="card" style="width:100%"><div style="font-size:13px;color:var(--color-neutral-400)">${wod.movements}</div></div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="big-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
       <div class="stepper-row">
         <div class="stepper">
@@ -412,7 +454,7 @@ function renderCoreBody(core) {
     <div class="big-time" id="coreTimeUp">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
     ${playPauseBtn(true)}
     <div class="checklist">${items}</div>
-    <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.finishCore()">Finish Extra Core</button>
+    <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.finishCore()">Finish Core</button>
   </div>`;
 }
 
@@ -425,8 +467,8 @@ function renderRating() {
       <h3>How did that feel?</h3>
       <div class="rating-buttons">
         <button class="btn btn-secondary btn-block" onclick="App.rate('easy')">Easy</button>
-        <button class="btn btn-primary btn-block" onclick="App.rate('right')">Right</button>
-        <button class="btn btn-secondary btn-block" onclick="App.rate('hard')">Hard</button>
+        <button class="btn btn-primary btn-block" onclick="App.rate('right')">Just Right</button>
+        <button class="btn btn-secondary btn-block" onclick="App.rate('hard')">Too Hard</button>
       </div>
     </div>
   </div>`;
@@ -435,13 +477,14 @@ function renderRating() {
 function renderSummary() {
   const plan = Store.state.today;
   const order = ['warmup', 'skill', 'wod', 'core'];
-  const rows = order.map(s => `<div class="card" style="flex-direction:row;justify-content:space-between;align-items:center;display:flex">
+  const rows = order.map(s => `<div class="card summary-row">
     <div class="section-title" style="font-size:15px">${SECTION_TITLES[s]}</div>
     <span class="tag ${RATING_TAG_CLASS[plan.ratings[s]]}">${RATING_LABEL[plan.ratings[s]]}</span>
   </div>`).join('');
   return `<div class="screen no-nav">
     <div class="exec-body" style="padding-top:var(--space-8)">
-      <h2>Workout Complete</h2>
+      <span class="tag tag-good">SESSION COMPLETE</span>
+      <h2>Nice work.</h2>
       <div class="move-list">${rows}</div>
       <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.goToday()">Back to Today</button>
     </div>
@@ -453,7 +496,7 @@ function renderSummary() {
 function renderHistory() {
   const log = Store.state.sessionLog.slice().reverse();
   if (log.length === 0) {
-    return `<div class="empty-state"><h3>No sessions yet</h3><p>Finish your first workout and it'll show up here.</p></div>`;
+    return `<div class="empty-state"><h3>No sessions yet</h3><p>Finish your first session and it'll show up here.</p></div>`;
   }
   const items = log.map(entry => {
     const chips = ['warmup', 'skill', 'wod', 'core'].map(s => entry.ratings[s]
@@ -461,7 +504,7 @@ function renderHistory() {
     return `<div class="card history-item">
       <div class="history-top">
         <div class="history-date">${entry.date}</div>
-        <span class="tag tag-accent">${FOCUS_LABELS[entry.focus].toUpperCase()}</span>
+        <span class="tag tag-focus-${FOCUS_ACCENT[entry.focus]}">${FOCUS_LABELS[entry.focus].toUpperCase()}</span>
       </div>
       <div class="history-line">${entry.wodBadge} · ${entry.wodMovements}</div>
       <div class="rating-chips">${chips}</div>
@@ -470,13 +513,126 @@ function renderHistory() {
   return `<div class="section-heading">History</div><div class="card-list" style="padding-bottom:24px">${items}</div>`;
 }
 
+// ─── Timer factories — shared between fresh starts and reload-restores ────
+
+function makeTimerFor(section, plan) {
+  if (section === 'warmup') {
+    return new WTimer({ mode: 'up', onTick: () => { const e = byId('warmupTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
+  }
+  if (section === 'skill') {
+    const s = plan.skill;
+    if (s.shape === 'B') {
+      return new WTimer({
+        mode: 'down', durationMs: s.intervalSec * 1000,
+        onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+        onWarn: () => Feedback.tick(),
+        onComplete: () => App.advanceSkillB(),
+      });
+    }
+    return null; // shapes A/C don't run a clock at entry
+  }
+  if (section === 'wod') {
+    const w = plan.wod;
+    if (w.format === 'amrap') {
+      return new WTimer({
+        mode: 'down', durationMs: w.capSec * 1000,
+        onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+        onWarn: () => Feedback.tick(),
+        onComplete: () => App.finishAmrap(),
+      });
+    }
+    if (w.format === 'emom') {
+      return new WTimer({
+        mode: 'down', durationMs: 60 * 1000,
+        onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+        onWarn: () => Feedback.tick(),
+        onComplete: () => App.advanceWodEmom(),
+      });
+    }
+    return new WTimer({ mode: 'up', onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
+  }
+  if (section === 'core') {
+    const c = plan.core;
+    if (c.shape === 'tabata' || c.shape === 'holds') {
+      const dur = (c.shape === 'tabata' ? c.workSec : c.holdSec) * 1000;
+      return new WTimer({
+        mode: 'down', durationMs: dur,
+        onTick: () => { const e = byId('coreTime'); if (e) e.textContent = Math.ceil(UI.timer.remainingMs() / 1000); },
+        onWarn: () => Feedback.tick(),
+        onComplete: () => App.advanceCorePhase(),
+      });
+    }
+    return new WTimer({ mode: 'up', onTick: () => { const e = byId('coreTimeUp'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
+  }
+  return null;
+}
+
+function makeRestTimer(durMs) {
+  return new WTimer({
+    mode: 'down', durationMs: durMs,
+    onTick: () => { const e = byId('restTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+    onWarn: () => Feedback.tick(),
+    onComplete: () => { Feedback.roundChange(); UI.skillResting = false; render(); persistExec(); },
+  });
+}
+
+// ─── Exec-state persistence — survives a reload or an iOS PWA being purged ─
+
+function persistExec() {
+  if (UI.screen !== 'exec' || !Store.state.today) { Store.state.execState = null; return; }
+  const { timer, ...uiSnap } = UI;
+  Store.state.execState = {
+    planDate: Store.state.today.date,
+    ui: uiSnap,
+    timer: timer ? { elapsedMs: timer.elapsedMs(), running: timer.running } : null,
+    savedAt: Date.now(),
+  };
+  Store.save();
+}
+
+function restoreExecIfAny() {
+  const ex = Store.state.execState;
+  const plan = Store.state.today;
+  if (!ex || !plan || ex.planDate !== plan.date) { Store.state.execState = null; return false; }
+  if (plan.completed[ex.ui.execSection]) { Store.state.execState = null; return false; }
+
+  Object.assign(UI, ex.ui);
+  UI.leadIn = null;
+
+  let timer = null;
+  if (ex.ui.timerKind === 'entry') timer = makeTimerFor(ex.ui.execSection, plan);
+  else if (ex.ui.timerKind === 'rest') timer = makeRestTimer(plan.skill.rest * 1000);
+
+  if (timer && ex.timer) {
+    const gapMs = ex.timer.running ? Date.now() - ex.savedAt : 0;
+    timer.restore(ex.timer.elapsedMs + gapMs, ex.timer.running);
+  }
+  UI.timer = timer;
+  UI.running = timer ? timer.running : false;
+  UI.screen = 'exec';
+  return true;
+}
+
 // ─── App controller ─────────────────────────────────────────────────────────
 
 const App = {
   init() {
+    if (!Store.state.onboarded && Store.state.equipment.length === 0) {
+      Store.state.equipment = ALL_EQUIPMENT.slice();
+    }
     UI.screen = Store.state.onboarded ? 'today' : 'onboarding';
-    if (Store.state.onboarded) generateToday(Store.state);
+    if (Store.state.onboarded) {
+      generateToday(Store.state);
+      if (restoreExecIfAny()) { render(); this._startAutosave(); return; }
+    }
+    Store.state.execState = null;
     render();
+    this._startAutosave();
+  },
+
+  _startAutosave() {
+    if (this._autosaveIv) return;
+    this._autosaveIv = setInterval(() => { if (UI.screen === 'exec' && UI.leadIn === null) persistExec(); }, 4000);
   },
 
   goTab(tab) {
@@ -498,6 +654,14 @@ const App = {
     const eq = Store.state.equipment;
     const idx = eq.indexOf(id);
     if (idx >= 0) eq.splice(idx, 1); else eq.push(id);
+    Store.save(); render();
+  },
+  setAllEquip(on) {
+    Store.state.equipment = on ? ALL_EQUIPMENT.slice() : [];
+    Store.save(); render();
+  },
+  toggleSound() {
+    Store.state.soundOn = !Store.state.soundOn;
     Store.save(); render();
   },
   finishOnboarding() {
@@ -537,73 +701,49 @@ const App = {
 
     if (section === 'warmup') {
       UI.warmupChecks = new Array(plan.warmup.moves.length * plan.warmup.rounds).fill(false);
-      UI.timer = new WTimer({ mode: 'up', onTick: () => { const e = byId('warmupTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
-      UI.timer.start(); UI.running = true;
     } else if (section === 'skill') {
       const s = plan.skill;
-      if (s.shape === 'A') {
-        UI.skillSetIndex = 0; UI.skillWeight = s.weight; UI.skillResting = false;
-      } else if (s.shape === 'B') {
-        UI.bRoundIndex = 1;
-        UI.timer = new WTimer({
-          mode: 'down', durationMs: s.intervalSec * 1000,
-          onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-          onComplete: () => this.advanceSkillB(),
-        });
-        UI.timer.start(); UI.running = true;
-      } else {
-        UI.skillRoundIndex = 1; UI.skillResting = false;
-      }
+      if (s.shape === 'A') { UI.skillSetIndex = 0; UI.skillWeight = s.weight; UI.skillResting = false; }
+      else if (s.shape === 'B') { UI.bRoundIndex = 1; }
+      else { UI.skillRoundIndex = 1; UI.skillResting = false; }
     } else if (section === 'wod') {
-      const w = plan.wod;
       UI.wodStepIndex = 0; UI.wodRftRound = 0; UI.wodAmrapRounds = 0; UI.wodAmrapReps = 0; UI.bRoundIndex = 1;
-      if (w.format === 'amrap') {
-        UI.timer = new WTimer({
-          mode: 'down', durationMs: w.capSec * 1000,
-          onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-          onComplete: () => this.finishAmrap(),
-        });
-      } else if (w.format === 'emom') {
-        UI.timer = new WTimer({
-          mode: 'down', durationMs: 60 * 1000,
-          onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-          onComplete: () => this.advanceWodEmom(),
-        });
-      } else {
-        UI.timer = new WTimer({ mode: 'up', onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
-      }
-      UI.timer.start(); UI.running = true;
     } else if (section === 'core') {
       const c = plan.core;
-      if (c.shape === 'tabata' || c.shape === 'holds') {
-        UI.coreRound = 1; UI.corePhase = c.shape === 'tabata' ? 'work' : 'hold';
-        const dur = (c.shape === 'tabata' ? c.workSec : c.holdSec) * 1000;
-        UI.timer = new WTimer({
-          mode: 'down', durationMs: dur,
-          onTick: () => { const e = byId('coreTime'); if (e) e.textContent = Math.ceil(UI.timer.remainingMs() / 1000); },
-          onComplete: () => this.advanceCorePhase(),
-        });
-        UI.timer.start(); UI.running = true;
-      } else {
-        UI.coreChecks = new Array(c.moves.length * c.rounds).fill(false);
-        UI.timer = new WTimer({ mode: 'up', onTick: () => { const e = byId('coreTimeUp'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
-        UI.timer.start(); UI.running = true;
-      }
+      if (c.shape === 'tabata' || c.shape === 'holds') { UI.coreRound = 1; UI.corePhase = c.shape === 'tabata' ? 'work' : 'hold'; }
+      else { UI.coreChecks = new Array(c.moves.length * c.rounds).fill(false); }
     }
+
+    const timer = makeTimerFor(section, plan);
+    UI.timer = timer;
+    UI.timerKind = timer ? 'entry' : null;
+    UI.running = false;
+
+    if (!timer) { render(); persistExec(); return; }
+
+    UI.leadIn = 3;
     render();
+    runLeadIn((n) => { UI.leadIn = n; render(); }, () => {
+      UI.leadIn = null;
+      timer.start();
+      UI.running = true;
+      render();
+      persistExec();
+    });
   },
 
   exitExec() {
     if (UI.timer) { UI.timer.destroy(); UI.timer = null; }
+    Store.state.execState = null; Store.save();
     UI.screen = 'today'; render();
   },
 
   toggleTimer() {
     if (!UI.timer) return;
-    UI.timer.toggle(); UI.running = UI.timer.running; render();
+    UI.timer.toggle(); UI.running = UI.timer.running; render(); persistExec();
   },
 
-  toggleWarmupCheck(i) { UI.warmupChecks[i] = !UI.warmupChecks[i]; render(); },
+  toggleWarmupCheck(i) { UI.warmupChecks[i] = !UI.warmupChecks[i]; render(); persistExec(); },
   finishWarmup() {
     UI.pendingResult = { checked: UI.warmupChecks.filter(Boolean).length, total: UI.warmupChecks.length };
     this.goToRating('warmup');
@@ -613,7 +753,7 @@ const App = {
     const s = Store.state.today.skill;
     const inc = LIFT_INCREMENT[s.liftId] || 5;
     UI.skillWeight = Math.max(0, UI.skillWeight + dir * inc);
-    render();
+    render(); persistExec();
   },
   completeSet() {
     const s = Store.state.today.skill;
@@ -624,17 +764,15 @@ const App = {
     }
     UI.skillSetIndex += 1;
     UI.skillResting = true;
-    UI.timer = new WTimer({
-      mode: 'down', durationMs: s.rest * 1000,
-      onTick: () => { const e = byId('restTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-      onComplete: () => { UI.skillResting = false; render(); },
-    });
+    UI.timer = makeRestTimer(s.rest * 1000);
+    UI.timerKind = 'rest';
     UI.timer.start();
-    render();
+    render(); persistExec();
   },
   skipRest() {
     if (UI.timer) UI.timer.destroy();
-    UI.skillResting = false; render();
+    UI.timer = null; UI.timerKind = null;
+    UI.skillResting = false; render(); persistExec();
   },
   completeSkillRound() {
     const s = Store.state.today.skill;
@@ -645,13 +783,10 @@ const App = {
     }
     UI.skillRoundIndex += 1;
     UI.skillResting = true;
-    UI.timer = new WTimer({
-      mode: 'down', durationMs: s.rest * 1000,
-      onTick: () => { const e = byId('restTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-      onComplete: () => { UI.skillResting = false; render(); },
-    });
+    UI.timer = makeRestTimer(s.rest * 1000);
+    UI.timerKind = 'rest';
     UI.timer.start();
-    render();
+    render(); persistExec();
   },
   advanceSkillB() {
     const s = Store.state.today.skill;
@@ -660,10 +795,11 @@ const App = {
       this.goToRating('skill');
       return;
     }
+    Feedback.roundChange();
     UI.bRoundIndex += 1;
     UI.timer.reset(s.intervalSec * 1000);
     UI.timer.start();
-    render();
+    render(); persistExec();
   },
   skillSkipRound() { this.advanceSkillB(); },
 
@@ -676,15 +812,15 @@ const App = {
       if (UI.wodRftRound + 1 >= w.rounds) { this.finishWodWithClock(); return; }
       UI.wodRftRound += 1;
     }
-    render();
+    render(); persistExec();
   },
   finishFortime() { this.finishWodWithClock(); },
   finishWodWithClock() {
     UI.pendingResult = { score: fmtClock(UI.timer ? UI.timer.elapsedMs() : 0) };
     this.goToRating('wod');
   },
-  amrapAddRound() { UI.wodAmrapRounds += 1; render(); },
-  amrapAddRep(d) { UI.wodAmrapReps = Math.max(0, UI.wodAmrapReps + d); render(); },
+  amrapAddRound() { UI.wodAmrapRounds += 1; render(); persistExec(); },
+  amrapAddRep(d) { UI.wodAmrapReps = Math.max(0, UI.wodAmrapReps + d); render(); persistExec(); },
   finishAmrap() {
     UI.pendingResult = { score: `${UI.wodAmrapRounds}+${UI.wodAmrapReps}` };
     this.goToRating('wod');
@@ -696,10 +832,11 @@ const App = {
       this.goToRating('wod');
       return;
     }
+    Feedback.roundChange();
     UI.bRoundIndex += 1;
     UI.timer.reset(60 * 1000);
     UI.timer.start();
-    render();
+    render(); persistExec();
   },
   wodSkipRound() { this.advanceWodEmom(); },
 
@@ -707,28 +844,32 @@ const App = {
     const c = Store.state.today.core;
     if (c.shape === 'tabata') {
       if (UI.corePhase === 'work') {
+        Feedback.roundChange();
         UI.corePhase = 'rest';
         UI.timer.reset(c.restSec * 1000); UI.timer.start();
       } else if (UI.coreRound >= c.rounds) {
         this.finishCore();
       } else {
+        Feedback.roundChange();
         UI.coreRound += 1; UI.corePhase = 'work';
         UI.timer.reset(c.workSec * 1000); UI.timer.start();
       }
     } else {
       if (UI.corePhase === 'hold') {
+        Feedback.roundChange();
         UI.corePhase = 'rest';
         UI.timer.reset(c.restSec * 1000); UI.timer.start();
       } else if (UI.coreRound >= c.rounds) {
         this.finishCore();
       } else {
+        Feedback.roundChange();
         UI.coreRound += 1; UI.corePhase = 'hold';
         UI.timer.reset(c.holdSec * 1000); UI.timer.start();
       }
     }
-    render();
+    render(); persistExec();
   },
-  toggleCoreCheck(i) { UI.coreChecks[i] = !UI.coreChecks[i]; render(); },
+  toggleCoreCheck(i) { UI.coreChecks[i] = !UI.coreChecks[i]; render(); persistExec(); },
   finishCore() {
     UI.pendingResult = {};
     this.goToRating('core');
@@ -736,6 +877,8 @@ const App = {
 
   goToRating(section) {
     if (UI.timer) { UI.timer.destroy(); UI.timer = null; }
+    Feedback.complete();
+    Store.state.execState = null; Store.save();
     UI.execSection = section; UI.screen = 'rating';
     render();
   },

@@ -2,16 +2,29 @@
 // so background-tab throttling never causes the displayed time to skew.
 
 class WTimer {
-  constructor({ mode = 'up', durationMs = 0, onTick, onComplete } = {}) {
+  constructor({ mode = 'up', durationMs = 0, onTick, onComplete, onWarn, warnSec = 3 } = {}) {
     this.mode = mode;
     this.durationMs = durationMs;
     this.onTick = onTick;
     this.onComplete = onComplete;
+    this.onWarn = onWarn;
+    this.warnSec = warnSec;
     this.accumulated = 0;
     this.runStartTs = null;
     this.running = false;
     this._interval = null;
     this._completed = false;
+    this._lastWarnSec = null;
+  }
+
+  // Rehydrates a timer after a reload: elapsed is restored, and if it was
+  // running, it resumes counting from now rather than from a stale timestamp.
+  restore(elapsedMs, wasRunning) {
+    this.accumulated = Math.max(0, elapsedMs);
+    const doneAlready = this.mode === 'down' && this.remainingMs() <= 0;
+    this._completed = doneAlready;
+    if (wasRunning && !doneAlready) this.start();
+    else if (doneAlready && this.onComplete) this.onComplete();
   }
 
   _now() { return performance.now(); }
@@ -46,6 +59,7 @@ class WTimer {
     this.pause();
     this.accumulated = 0;
     this._completed = false;
+    this._lastWarnSec = null;
     if (durationMs != null) this.durationMs = durationMs;
   }
 
@@ -57,6 +71,13 @@ class WTimer {
   _tick() {
     const val = this.mode === 'down' ? this.remainingMs() : this.elapsedMs();
     if (this.onTick) this.onTick(val);
+    if (this.mode === 'down' && this.onWarn) {
+      const secLeft = Math.ceil(val / 1000);
+      if (secLeft <= this.warnSec && secLeft >= 1 && secLeft !== this._lastWarnSec) {
+        this._lastWarnSec = secLeft;
+        this.onWarn(secLeft);
+      }
+    }
     if (this.mode === 'down' && val <= 0 && !this._completed) {
       this._completed = true;
       this.pause();
