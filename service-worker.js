@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wodshed-v2';
+const CACHE_NAME = 'wodshed-v3';
 const SHELL = [
   './',
   './index.html',

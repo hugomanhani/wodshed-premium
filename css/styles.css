@@ -206,6 +206,7 @@ button { font-family: var(--font); }
 
 .wod-line { width: 100%; }
 .wod-line div { font-size: 13px; color: var(--color-neutral-400); }
+.wod-between { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--color-divider); font-size: 13px; font-weight: 600; color: var(--color-accent-400); }
 
 .rest-card { width: 100%; align-items: center; gap: 8px; display: flex; flex-direction: column; }
 

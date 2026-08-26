@@ -36,6 +36,20 @@ const LADDER_PATTERNS = [
   { id: 'ladder_15', steps: [15, 12, 9, 6, 3] },
 ];
 
+// Each movement climbs its own ladder — e.g. pull-ups 21-15-9 while the second
+// movement runs 12-9-6 — instead of every movement sharing one step sequence.
+const LADDER_MULTI_PATTERNS = [
+  { id: 'ladderm_a', stepsA: [21, 15, 9], stepsB: [12, 9, 6] },
+  { id: 'ladderm_b', stepsA: [15, 12, 9, 6], stepsB: [10, 8, 6, 4] },
+  { id: 'ladderm_c', stepsA: [20, 15, 10, 5], stepsB: [8, 6, 4, 2] },
+];
+
+const WOD_FORMAT_LIST = [
+  'amrap', 'amreps', 'amrap_multi', 'amrap_buyin', 'amrap_ascending',
+  'fortime', 'rft', 'ladder', 'ladder_multi', 'fortime_repeats', 'rft_bookend', 'fortime_between',
+  'emom', 'emom_multi', 'emom_open',
+];
+
 function hasEquip(userEquip, needed) {
   return needed.every(e => userEquip.includes(e));
 }
@@ -248,83 +262,212 @@ function generateCore(state, userEquip) {
   return { ...tpl, moves: moves.length ? moves : tpl.moves };
 }
 
-function generateWod(state, focus, userEquip) {
-  const mult = state.volumeMultiplier[focus] || 1.0;
-  const formats = ['amrap', 'rft', 'ladder', 'fortime', 'emom'];
-  const bonus = { ladder: 3 };
-  const format = lruPick(formats, state.contentLRU, bonus);
-  markUsed(state, format);
+function buildLine(m, mult, factor) {
+  const base = WOD_MOVEMENT_BASE[m] || { amount: 10, unit: 'reps' };
+  const amt = scaledAmount(base.amount * factor, base.unit, mult);
+  return formatMovementLine(m, amt, base.unit);
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-  if (format === 'ladder') {
-    const patId = lruPick(LADDER_PATTERNS.map(p => p.id), state.contentLRU, { ladder_12: 2 });
-    const pat = LADDER_PATTERNS.find(p => p.id === patId);
-    markUsed(state, patId);
-    const moves = pickWodMovements(state, focus, userEquip, 2);
-    moves.forEach(m => markUsed(state, m));
-    const capMin = 14 + Math.round((pat.steps.length - 3) * 1.5);
-    return {
-      format: 'ladder', label: 'Ladder', badge: `CAP ${capMin}:00`, capSec: capMin * 60,
-      steps: pat.steps, movements: moves.map(m => exerciseById(m).name).join(' + '),
-      moveIds: moves,
-    };
-  }
-  if (format === 'rft') {
-    const rounds = [3, 4, 5][Math.floor(Math.random() * 3)];
-    const moves = pickWodMovements(state, focus, userEquip, 2);
-    moves.forEach(m => markUsed(state, m));
-    const lines = moves.map(m => {
-      const base = WOD_MOVEMENT_BASE[m] || { amount: 10, unit: 'reps' };
-      const amt = scaledAmount(base.amount * 0.5, base.unit, mult);
-      return formatMovementLine(m, amt, base.unit);
-    });
-    return {
-      format: 'rft', label: 'RFT', badge: `${rounds} ROUNDS`, rounds,
-      movements: lines.join(' + '), moveIds: moves,
-    };
-  }
-  if (format === 'amrap') {
-    const capMin = [8, 10, 12, 14, 15, 20][Math.floor(Math.random() * 6)];
-    const moves = pickWodMovements(state, focus, userEquip, 3);
-    moves.forEach(m => markUsed(state, m));
-    const lines = moves.map(m => {
-      const base = WOD_MOVEMENT_BASE[m] || { amount: 10, unit: 'reps' };
-      const amt = scaledAmount(base.amount * 0.6, base.unit, mult);
-      return formatMovementLine(m, amt, base.unit);
-    });
-    return {
-      format: 'amrap', label: 'AMRAP', badge: `${capMin}:00 AMRAP`, capSec: capMin * 60,
-      movements: lines.join(' + '), moveIds: moves,
-    };
-  }
-  if (format === 'emom') {
-    const rounds = [8, 10, 12, 14][Math.floor(Math.random() * 4)];
-    const moves = pickWodMovements(state, focus, userEquip, 2);
-    moves.forEach(m => markUsed(state, m));
-    const rawLines = moves.map(m => {
-      const base = WOD_MOVEMENT_BASE[m] || { amount: 10, unit: 'reps' };
-      const amt = scaledAmount(base.amount * 0.5, base.unit, mult);
-      return formatMovementLine(m, amt, base.unit);
-    });
-    const lines = rawLines.map((l, i) => `${i === 0 ? 'Odd' : 'Even'} Min: ${l}`);
-    return {
-      format: 'emom', label: 'EMOM', badge: `EMOM ${rounds}`, rounds,
-      movements: lines.join(' · '), moveIds: moves,
-      oddLine: rawLines[0], evenLine: rawLines[1] || rawLines[0],
-    };
-  }
-  // fortime
-  const capMin = [10, 12, 15, 18][Math.floor(Math.random() * 4)];
+// ─── AMRAP family ───────────────────────────────────────────────────────────
+
+function genAmrap(state, focus, userEquip, mult) {
+  const capMin = pick([8, 10, 12, 14, 15, 20]);
+  const moves = pickWodMovements(state, focus, userEquip, 3);
+  moves.forEach(m => markUsed(state, m));
+  const lines = moves.map(m => buildLine(m, mult, 0.6));
+  return { format: 'amrap', label: 'AMRAP', badge: `${capMin}:00 AMRAP`, capSec: capMin * 60, movements: lines.join(' + '), moveIds: moves };
+}
+
+// Single continuous rep count instead of rounds+reps — max reps of 1-2 movements.
+function genAmreps(state, focus, userEquip, mult) {
+  const capMin = pick([5, 7, 8, 10]);
   const moves = pickWodMovements(state, focus, userEquip, 2);
   moves.forEach(m => markUsed(state, m));
-  const lines = moves.map(m => {
-    const base = WOD_MOVEMENT_BASE[m] || { amount: 10, unit: 'reps' };
-    const amt = scaledAmount(base.amount * 0.8, base.unit, mult);
-    return formatMovementLine(m, amt, base.unit);
-  });
+  const lines = moves.map(m => buildLine(m, mult, 0.5));
+  return { format: 'amreps', label: 'AMReps', badge: `${capMin}:00 AMReps`, capSec: capMin * 60, movements: lines.join(' + '), moveIds: moves };
+}
+
+// The same short AMRAP run several times, with rest between efforts.
+function genAmrapMulti(state, focus, userEquip, mult) {
+  const intervals = pick([2, 3]);
+  const workMin = pick([4, 5, 6]);
+  const restMin = 2;
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const lines = moves.map(m => buildLine(m, mult, 0.5));
   return {
-    format: 'fortime', label: 'For Time', badge: `CAP ${capMin}:00`, capSec: capMin * 60,
-    movements: lines.join(' + '), moveIds: moves,
+    format: 'amrap_multi', label: 'AMRAP Intervals', badge: `${intervals}× ${workMin}:00 AMRAP`,
+    intervals, workSec: workMin * 60, restSec: restMin * 60, movements: lines.join(' + '), moveIds: moves,
   };
+}
+
+// A for-time task before the clock starts the AMRAP proper.
+function genAmrapBuyin(state, focus, userEquip, mult) {
+  const capMin = pick([8, 10, 12]);
+  const buyMoves = pickWodMovements(state, focus, userEquip, 1);
+  const wodMoves = pickWodMovements(state, focus, userEquip, 2);
+  [...buyMoves, ...wodMoves].forEach(m => markUsed(state, m));
+  const buyIn = buildLine(buyMoves[0], mult, 1.2);
+  const lines = wodMoves.map(m => buildLine(m, mult, 0.5));
+  return {
+    format: 'amrap_buyin', label: 'AMRAP', badge: `Buy-In + ${capMin}:00 AMRAP`, capSec: capMin * 60,
+    buyIn, movements: lines.join(' + '), moveIds: [...buyMoves, ...wodMoves],
+  };
+}
+
+// Round 1 = 1 rep, round 2 = 2 reps, climbing until the clock runs out.
+function genAmrapAscending(state, focus, userEquip, mult) {
+  const capMin = pick([10, 12, 15]);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const names = moves.map(m => exerciseById(m).name);
+  return {
+    format: 'amrap_ascending', label: 'Ascending AMRAP', badge: `${capMin}:00 Ascending`, capSec: capMin * 60,
+    movements: `${names.join(' + ')} — +1 rep every round`, moveIds: moves, startReps: 1, increment: 1,
+  };
+}
+
+// ─── For Time family ────────────────────────────────────────────────────────
+
+function genFortime(state, focus, userEquip, mult) {
+  const capMin = pick([10, 12, 15, 18]);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const lines = moves.map(m => buildLine(m, mult, 0.8));
+  return { format: 'fortime', label: 'For Time', badge: `CAP ${capMin}:00`, capSec: capMin * 60, movements: lines.join(' + '), moveIds: moves };
+}
+
+function genRft(state, focus, userEquip, mult) {
+  const rounds = pick([3, 4, 5]);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const lines = moves.map(m => buildLine(m, mult, 0.5));
+  return { format: 'rft', label: 'RFT', badge: `${rounds} ROUNDS`, rounds, movements: lines.join(' + '), moveIds: moves };
+}
+
+// Same step sequence applies to every movement in the round (21-15-9 of A, 21-15-9 of B).
+function genLadder(state, focus, userEquip) {
+  const patId = lruPick(LADDER_PATTERNS.map(p => p.id), state.contentLRU, { ladder_12: 2 });
+  const pat = LADDER_PATTERNS.find(p => p.id === patId);
+  markUsed(state, patId);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const capMin = 14 + Math.round((pat.steps.length - 3) * 1.5);
+  return {
+    format: 'ladder', label: 'Ladder', badge: `CAP ${capMin}:00`, capSec: capMin * 60,
+    steps: pat.steps, movements: moves.map(m => exerciseById(m).name).join(' + '), moveIds: moves,
+  };
+}
+
+// Each movement climbs its own step sequence, not a shared one.
+function genLadderMulti(state, focus, userEquip) {
+  const patId = lruPick(LADDER_MULTI_PATTERNS.map(p => p.id), state.contentLRU);
+  const pat = LADDER_MULTI_PATTERNS.find(p => p.id === patId);
+  markUsed(state, patId);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const b = moves[1] || moves[0];
+  const perMove = [
+    { id: moves[0], name: exerciseById(moves[0]).name, steps: pat.stepsA },
+    { id: b, name: exerciseById(b).name, steps: pat.stepsB },
+  ];
+  const rounds = pat.stepsA.length;
+  const capMin = 14 + rounds;
+  return {
+    format: 'ladder_multi', label: 'Ladder', badge: `CAP ${capMin}:00`, capSec: capMin * 60, rounds, perMove,
+    movements: perMove.map(p => `${p.steps.join('-')} ${p.name}`).join(' / '), moveIds: moves,
+  };
+}
+
+// N separate for-time efforts of the same task, with rest between — each timed on its own.
+function genFortimeRepeats(state, focus, userEquip, mult) {
+  const repeats = pick([3, 4, 5]);
+  const restSec = 120;
+  const moves = pickWodMovements(state, focus, userEquip, 1);
+  moves.forEach(m => markUsed(state, m));
+  const line = buildLine(moves[0], mult, 0.3);
+  return { format: 'fortime_repeats', label: 'For Time Repeats', badge: `${repeats}× For Time`, repeats, restSec, movements: line, moveIds: moves };
+}
+
+// A for-time task before the rounds, and another after — one continuous clock throughout.
+function genRftBookend(state, focus, userEquip, mult) {
+  const rounds = pick([3, 4, 5]);
+  const buyMoves = pickWodMovements(state, focus, userEquip, 1);
+  const mainMoves = pickWodMovements(state, focus, userEquip, 2);
+  const outMoves = pickWodMovements(state, focus, userEquip, 1);
+  [...buyMoves, ...mainMoves, ...outMoves].forEach(m => markUsed(state, m));
+  const buyIn = buildLine(buyMoves[0], mult, 1.0);
+  const buyOut = buildLine(outMoves[0], mult, 1.0);
+  const lines = mainMoves.map(m => buildLine(m, mult, 0.5));
+  return {
+    format: 'rft_bookend', label: 'RFT', badge: `${rounds} ROUNDS + Bookends`, rounds,
+    buyIn, buyOut, movements: lines.join(' + '), moveIds: [...buyMoves, ...mainMoves, ...outMoves],
+  };
+}
+
+// An extra movement inserted between each round of an otherwise ordinary RFT piece.
+function genFortimeBetween(state, focus, userEquip, mult) {
+  const rounds = pick([3, 4, 5]);
+  const mainMoves = pickWodMovements(state, focus, userEquip, 2);
+  const betweenMoves = pickWodMovements(state, focus, userEquip, 1);
+  [...mainMoves, ...betweenMoves].forEach(m => markUsed(state, m));
+  const lines = mainMoves.map(m => buildLine(m, mult, 0.5));
+  const betweenLine = buildLine(betweenMoves[0], mult, 0.4);
+  return {
+    format: 'fortime_between', label: 'For Time', badge: `${rounds} ROUNDS + Between`, rounds,
+    movements: lines.join(' + '), betweenLine, moveIds: [...mainMoves, ...betweenMoves],
+  };
+}
+
+// ─── EMOM family ────────────────────────────────────────────────────────────
+
+// Every movement, every minute (not alternating).
+function genEmomMulti(state, focus, userEquip, mult) {
+  const rounds = pick([8, 10, 12]);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const lines = moves.map(m => buildLine(m, mult, 0.4));
+  return { format: 'emom_multi', label: 'EMOM', badge: `EMOM ${rounds}`, rounds, movements: lines.join(' + '), moveIds: moves };
+}
+
+function genEmomAlt(state, focus, userEquip, mult) {
+  const rounds = pick([8, 10, 12, 14]);
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const rawLines = moves.map(m => buildLine(m, mult, 0.5));
+  const lines = rawLines.map((l, i) => `${i === 0 ? 'Odd' : 'Even'} Min: ${l}`);
+  return {
+    format: 'emom', label: 'EMOM', badge: `EMOM ${rounds}`, rounds, movements: lines.join(' · '), moveIds: moves,
+    oddLine: rawLines[0], evenLine: rawLines[1] || rawLines[0],
+  };
+}
+
+// No fixed round count — keep going, minute after minute, until you stop.
+function genEmomOpen(state, focus, userEquip, mult) {
+  const moves = pickWodMovements(state, focus, userEquip, 2);
+  moves.forEach(m => markUsed(state, m));
+  const rawLines = moves.map(m => buildLine(m, mult, 0.5));
+  const lines = rawLines.map((l, i) => `${i === 0 ? 'Odd' : 'Even'} Min: ${l}`);
+  return {
+    format: 'emom_open', label: 'EMOM', badge: 'EMOM — As Long As Possible', movements: lines.join(' · '), moveIds: moves,
+    oddLine: rawLines[0], evenLine: rawLines[1] || rawLines[0],
+  };
+}
+
+const WOD_GENERATORS = {
+  amrap: genAmrap, amreps: genAmreps, amrap_multi: genAmrapMulti, amrap_buyin: genAmrapBuyin, amrap_ascending: genAmrapAscending,
+  fortime: genFortime, rft: genRft, ladder: (s, f, e) => genLadder(s, f, e), ladder_multi: (s, f, e) => genLadderMulti(s, f, e),
+  fortime_repeats: genFortimeRepeats, rft_bookend: genRftBookend, fortime_between: genFortimeBetween,
+  emom: genEmomAlt, emom_multi: genEmomMulti, emom_open: genEmomOpen,
+};
+
+function generateWod(state, focus, userEquip) {
+  const mult = state.volumeMultiplier[focus] || 1.0;
+  const bonus = { ladder: 2, fortime: 1, rft: 1, amrap: 1 };
+  const format = lruPick(WOD_FORMAT_LIST, state.contentLRU, bonus);
+  markUsed(state, format);
+  return WOD_GENERATORS[format](state, focus, userEquip, mult);
 }
 
 function benchmarkReady(state) {

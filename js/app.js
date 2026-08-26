@@ -60,6 +60,8 @@ const UI = {
   ratingFor: null,
   warmupChecks: [], skillSetIndex: 0, skillWeight: 0, skillResting: false, skillRoundIndex: 1,
   bRoundIndex: 1, wodElapsed: 0, wodStepIndex: 0, wodRftRound: 0, wodAmrapRounds: 0, wodAmrapReps: 0,
+  wodPhase: null, wodIntervalIndex: 1, wodIntervalScores: [], wodRung: 1, wodLastCompletedRung: 0,
+  wodRepeatIndex: 1, wodRepeatTimes: [], wodBuyInMs: null,
   coreRound: 1, corePhase: 'work', coreChecks: [], pendingResult: null, running: false,
 };
 
@@ -528,14 +530,35 @@ function capTagHtml(elapsedMs, capSec) {
   return elapsedMs / 1000 >= capSec ? `<span class="tag tag-warn">TIME CAP</span>` : '';
 }
 
+function amrapStepperRow() {
+  return `<div class="stepper-row">
+    <div class="stepper">
+      <div class="stepper-label">Rounds</div>
+      <button class="stepper-val" style="border:none;font-size:20px" onclick="App.amrapAddRound()">${UI.wodAmrapRounds}</button>
+    </div>
+    <div class="stepper">
+      <div class="stepper-label">+ Reps</div>
+      <div class="stepper-controls">
+        <button class="stepper-btn" onclick="App.amrapAddRep(-1)">−</button>
+        <div class="stepper-val">${UI.wodAmrapReps}</div>
+        <button class="stepper-btn" onclick="App.amrapAddRep(1)">+</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderWodBody(wod, plan) {
-  if (wod.format === 'ladder') {
-    const step = wod.steps[UI.wodStepIndex];
-    const isLast = UI.wodStepIndex + 1 >= wod.steps.length;
+  const f = wod.format;
+
+  if (f === 'ladder' || f === 'ladder_multi') {
+    const stepCount = f === 'ladder' ? wod.steps.length : wod.rounds;
+    const isLast = UI.wodStepIndex + 1 >= stepCount;
+    const stepLabel = f === 'ladder' ? wod.steps[UI.wodStepIndex]
+      : wod.perMove.map(p => `${p.steps[UI.wodStepIndex]} ${p.name}`).join(' + ');
     return `<div class="exec-body">
       <div class="card wod-line"><div>${wod.movements}</div></div>
-      <div class="section-meta">ROUND ${UI.wodStepIndex + 1} / ${wod.steps.length} · ${wod.steps.join('–')}</div>
-      <div class="big-time">${step}</div>
+      <div class="section-meta">ROUND ${UI.wodStepIndex + 1} / ${stepCount}${f === 'ladder' ? ' · ' + wod.steps.join('–') : ''}</div>
+      <div class="big-time" style="${f === 'ladder_multi' ? 'font-size:38px' : ''}">${stepLabel}</div>
       <div class="mid-time mid-time-dim" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
       ${capTagHtml(UI.timer ? UI.timer.elapsedMs() : 0, wod.capSec)}
       <div class="action-row">
@@ -544,10 +567,12 @@ function renderWodBody(wod, plan) {
       </div>
     </div>`;
   }
-  if (wod.format === 'rft') {
+
+  if (f === 'rft' || f === 'fortime_between') {
     const isLast = UI.wodRftRound + 1 >= wod.rounds;
+    const between = f === 'fortime_between' && !isLast ? `<div class="wod-between">Then: ${wod.betweenLine}</div>` : '';
     return `<div class="exec-body">
-      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="card wod-line"><div>${wod.movements}</div>${between}</div>
       <div class="section-meta">ROUND ${UI.wodRftRound + 1} / ${wod.rounds}</div>
       <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
       ${capTagHtml(UI.timer ? UI.timer.elapsedMs() : 0, wod.capSec)}
@@ -557,7 +582,39 @@ function renderWodBody(wod, plan) {
       </div>
     </div>`;
   }
-  if (wod.format === 'fortime') {
+
+  if (f === 'rft_bookend') {
+    const elapsed = fmtClock(UI.timer ? UI.timer.elapsedMs() : 0);
+    if (UI.wodPhase === 'buyin') {
+      return `<div class="exec-body">
+        <div class="time-label">Buy-In</div>
+        <div class="card wod-line"><div>${wod.buyIn}</div></div>
+        <div class="mid-time" id="wodTime">${elapsed}</div>
+        <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.rftBookendBuyInDone()">Buy-In Done</button>
+      </div>`;
+    }
+    if (UI.wodPhase === 'buyout') {
+      return `<div class="exec-body">
+        <div class="time-label">Buy-Out</div>
+        <div class="card wod-line"><div>${wod.buyOut}</div></div>
+        <div class="mid-time" id="wodTime">${elapsed}</div>
+        <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.finishWodWithClock()">Finish WOD</button>
+      </div>`;
+    }
+    const isLast = UI.wodRftRound + 1 >= wod.rounds;
+    return `<div class="exec-body">
+      <div class="time-label">Main Rounds</div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="section-meta">ROUND ${UI.wodRftRound + 1} / ${wod.rounds}</div>
+      <div class="mid-time" id="wodTime">${elapsed}</div>
+      <div class="action-row">
+        ${playPauseBtn(false)}
+        <button class="btn btn-primary" style="flex:1" onclick="App.rftBookendRoundDone()">${isLast ? 'Go to Buy-Out' : 'Round Done'}</button>
+      </div>
+    </div>`;
+  }
+
+  if (f === 'fortime') {
     return `<div class="exec-body">
       <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
@@ -568,40 +625,104 @@ function renderWodBody(wod, plan) {
       </div>
     </div>`;
   }
-  if (wod.format === 'amrap') {
+
+  if (f === 'fortime_repeats') {
+    if (UI.wodPhase === 'rest') {
+      return `<div class="exec-body">
+        <div class="time-label">Rest before repeat ${UI.wodRepeatIndex + 1} / ${wod.repeats}</div>
+        <div class="mid-time" id="restTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
+        <button class="btn btn-ghost" onclick="App.skipRepeatRest()">Skip Rest</button>
+      </div>`;
+    }
+    const isLastRepeat = UI.wodRepeatIndex >= wod.repeats;
+    return `<div class="exec-body">
+      <div class="section-meta">REPEAT ${UI.wodRepeatIndex} / ${wod.repeats}</div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
+      ${UI.wodRepeatTimes.length ? `<div class="section-meta">Previous: ${UI.wodRepeatTimes.join(', ')}</div>` : ''}
+      <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.repeatDone()">${isLastRepeat ? 'Finish Final Repeat' : 'Repeat Done'}</button>
+    </div>`;
+  }
+
+  if (f === 'amrap' || f === 'amreps') {
+    const counter = f === 'amreps'
+      ? `<div class="stepper-row"><div class="stepper"><div class="stepper-label">Reps</div><div class="stepper-controls">
+          <button class="stepper-btn" onclick="App.amrapAddRep(-1)">−</button><div class="stepper-val">${UI.wodAmrapReps}</div><button class="stepper-btn" onclick="App.amrapAddRep(1)">+</button>
+        </div></div></div>`
+      : amrapStepperRow();
     return `<div class="exec-body">
       <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="big-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
-      <div class="stepper-row">
-        <div class="stepper">
-          <div class="stepper-label">Rounds</div>
-          <button class="stepper-val" style="border:none;font-size:20px" onclick="App.amrapAddRound()">${UI.wodAmrapRounds}</button>
-        </div>
-        <div class="stepper">
-          <div class="stepper-label">+ Reps</div>
-          <div class="stepper-controls">
-            <button class="stepper-btn" onclick="App.amrapAddRep(-1)">−</button>
-            <div class="stepper-val">${UI.wodAmrapReps}</div>
-            <button class="stepper-btn" onclick="App.amrapAddRep(1)">+</button>
-          </div>
-        </div>
-      </div>
+      ${counter}
       <div class="action-row" style="margin-top:auto">
         ${playPauseBtn(true)}
         <button class="btn btn-ghost" onclick="App.finishAmrap()">Finish Early</button>
       </div>
     </div>`;
   }
-  // emom
-  const isOdd = UI.bRoundIndex % 2 === 1;
-  const line = plan.isBenchmark ? wod.movements : (isOdd ? wod.oddLine : wod.evenLine);
-  const isLastRound = UI.bRoundIndex >= wod.rounds;
+
+  if (f === 'amrap_buyin') {
+    if (UI.wodPhase === 'buyin') {
+      return `<div class="exec-body">
+        <div class="time-label">Buy-In</div>
+        <div class="card wod-line"><div>${wod.buyIn}</div></div>
+        <div class="mid-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
+        <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.amrapBuyInDone()">Buy-In Done — Start AMRAP</button>
+      </div>`;
+    }
+    return `<div class="exec-body">
+      <div class="section-meta">Buy-in: ${fmtClock(UI.wodBuyInMs || 0)}</div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="big-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
+      ${amrapStepperRow()}
+      <div class="action-row" style="margin-top:auto">
+        ${playPauseBtn(true)}
+        <button class="btn btn-ghost" onclick="App.finishAmrap()">Finish Early</button>
+      </div>
+    </div>`;
+  }
+
+  if (f === 'amrap_multi') {
+    if (UI.wodPhase === 'rest') {
+      return `<div class="exec-body">
+        <div class="time-label">Rest before interval ${UI.wodIntervalIndex + 1} / ${wod.intervals}</div>
+        <div class="mid-time" id="restTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
+        <button class="btn btn-ghost" onclick="App.skipIntervalRest()">Skip Rest</button>
+      </div>`;
+    }
+    return `<div class="exec-body">
+      <div class="section-meta">INTERVAL ${UI.wodIntervalIndex} / ${wod.intervals}</div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="big-time" id="wodTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
+      ${amrapStepperRow()}
+      ${UI.wodIntervalScores.length ? `<div class="section-meta">Done: ${UI.wodIntervalScores.join(', ')}</div>` : ''}
+      <button class="btn btn-ghost" style="margin-top:auto" onclick="App.finishIntervalEarly()">End Interval Early</button>
+    </div>`;
+  }
+
+  if (f === 'amrap_ascending') {
+    return `<div class="exec-body">
+      <div class="section-meta">RUNG ${UI.wodRung}</div>
+      <div class="big-time">${UI.wodRung}<span class="big-time-unit"> reps each</span></div>
+      <div class="card wod-line"><div>${wod.movements}</div></div>
+      <div class="mid-time mid-time-dim" id="wodTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
+      <button class="btn btn-primary btn-block" style="margin-top:auto" onclick="App.ascendingRoundDone()">Rung Done — Next</button>
+    </div>`;
+  }
+
+  // emom / emom_multi / emom_open
+  let line;
+  if (f === 'emom_multi') line = wod.movements;
+  else { const isOdd = UI.bRoundIndex % 2 === 1; line = plan.isBenchmark ? wod.movements : (isOdd ? wod.oddLine : wod.evenLine); }
+  const hasRounds = !!wod.rounds;
+  const isLastRound = hasRounds && UI.bRoundIndex >= wod.rounds;
   return `<div class="exec-body">
-    <div class="time-label">MIN ${UI.bRoundIndex} / ${wod.rounds}</div>
+    <div class="time-label">MIN ${UI.bRoundIndex}${hasRounds ? ' / ' + wod.rounds : ''}</div>
     <div class="section-meta">${line}</div>
     <div class="big-time" id="bTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
     ${playPauseBtn(true)}
-    <button class="btn btn-ghost" style="margin-top:auto" onclick="App.wodSkipRound()">${isLastRound ? 'Finish WOD' : 'Skip to Next Minute'}</button>
+    <button class="btn btn-ghost" style="margin-top:auto" onclick="App.wodSkipRound()">${isLastRound ? 'Finish WOD' : (hasRounds ? 'Skip to Next Minute' : 'Skip Minute')}</button>
+    ${!hasRounds ? `<button class="btn btn-primary btn-block" onclick="App.finishOpenEmom()">End EMOM</button>` : ''}
   </div>`;
 }
 
@@ -724,23 +845,37 @@ function makeTimerFor(section, plan) {
   }
   if (section === 'wod') {
     const w = plan.wod;
-    if (w.format === 'amrap') {
-      return new WTimer({
-        mode: 'down', durationMs: w.capSec * 1000,
-        onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-        onWarn: () => Feedback.tick(),
-        onComplete: () => App.finishAmrap(),
-      });
+    const downWod = (durationMs, onComplete) => new WTimer({
+      mode: 'down', durationMs,
+      onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+      onWarn: () => Feedback.tick(), onComplete,
+    });
+    const upWod = () => new WTimer({ mode: 'up', onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
+    const downRest = (durationMs, onComplete) => new WTimer({
+      mode: 'down', durationMs,
+      onTick: () => { const e = byId('restTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+      onWarn: () => Feedback.tick(), onComplete,
+    });
+    const downMin = (onComplete) => new WTimer({
+      mode: 'down', durationMs: 60 * 1000,
+      onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
+      onWarn: () => Feedback.tick(), onComplete,
+    });
+
+    if (w.format === 'amrap' || w.format === 'amreps') return downWod(w.capSec * 1000, () => App.finishAmrap());
+    if (w.format === 'amrap_ascending') return downWod(w.capSec * 1000, () => App.finishAscending());
+    if (w.format === 'amrap_buyin') {
+      return UI.wodPhase === 'buyin' ? upWod() : downWod(w.capSec * 1000, () => App.finishAmrap());
     }
-    if (w.format === 'emom') {
-      return new WTimer({
-        mode: 'down', durationMs: 60 * 1000,
-        onTick: () => { const e = byId('bTime'); if (e) e.textContent = fmtClock(UI.timer.remainingMs()); },
-        onWarn: () => Feedback.tick(),
-        onComplete: () => App.advanceWodEmom(),
-      });
+    if (w.format === 'amrap_multi') {
+      return UI.wodPhase === 'rest' ? downRest(w.restSec * 1000, () => App.advanceAmrapMultiFromRest()) : downWod(w.workSec * 1000, () => App.advanceAmrapMultiFromWork());
     }
-    return new WTimer({ mode: 'up', onTick: () => { const e = byId('wodTime'); if (e) e.textContent = fmtClock(UI.timer.elapsedMs()); } });
+    if (w.format === 'fortime_repeats') {
+      return UI.wodPhase === 'rest' ? downRest(w.restSec * 1000, () => App.advanceRepeatFromRest()) : upWod();
+    }
+    if (w.format === 'emom' || w.format === 'emom_multi' || w.format === 'emom_open') return downMin(() => App.advanceWodEmom());
+    // ladder, ladder_multi, rft, fortime, fortime_between, rft_bookend — self-paced, clock counts up
+    return upWod();
   }
   if (section === 'core') {
     const c = plan.core;
@@ -902,7 +1037,14 @@ const App = {
       else if (s.shape === 'B') { UI.bRoundIndex = 1; }
       else { UI.skillRoundIndex = 1; UI.skillResting = false; }
     } else if (section === 'wod') {
+      const w = plan.wod;
       UI.wodStepIndex = 0; UI.wodRftRound = 0; UI.wodAmrapRounds = 0; UI.wodAmrapReps = 0; UI.bRoundIndex = 1;
+      UI.wodIntervalIndex = 1; UI.wodIntervalScores = [];
+      UI.wodRung = w.startReps || 1; UI.wodLastCompletedRung = 0;
+      UI.wodRepeatIndex = 1; UI.wodRepeatTimes = [];
+      if (w.format === 'amrap_buyin' || w.format === 'rft_bookend') UI.wodPhase = 'buyin';
+      else if (w.format === 'amrap_multi') UI.wodPhase = 'work';
+      else UI.wodPhase = null;
     } else if (section === 'core') {
       const c = plan.core;
       if (c.shape === 'tabata' || c.shape === 'holds') { UI.coreRound = 1; UI.corePhase = c.shape === 'tabata' ? 'work' : 'hold'; }
@@ -1000,12 +1142,14 @@ const App = {
 
   wodRoundDone() {
     const w = Store.state.today.wod;
-    if (w.format === 'ladder') {
-      if (UI.wodStepIndex + 1 >= w.steps.length) { this.finishWodWithClock(); return; }
+    if (w.format === 'ladder' || w.format === 'ladder_multi') {
+      const stepCount = w.format === 'ladder' ? w.steps.length : w.rounds;
+      if (UI.wodStepIndex + 1 >= stepCount) { this.finishWodWithClock(); return; }
       UI.wodStepIndex += 1;
-    } else if (w.format === 'rft') {
+    } else if (w.format === 'rft' || w.format === 'fortime_between') {
       if (UI.wodRftRound + 1 >= w.rounds) { this.finishWodWithClock(); return; }
       UI.wodRftRound += 1;
+      if (w.format === 'fortime_between') Feedback.roundChange();
     }
     render(); persistExec();
   },
@@ -1017,12 +1161,127 @@ const App = {
   amrapAddRound() { UI.wodAmrapRounds += 1; render(); persistExec(); },
   amrapAddRep(d) { UI.wodAmrapReps = Math.max(0, UI.wodAmrapReps + d); render(); persistExec(); },
   finishAmrap() {
-    UI.pendingResult = { score: `${UI.wodAmrapRounds}+${UI.wodAmrapReps}` };
+    const w = Store.state.today.wod;
+    if (w.format === 'amreps') {
+      UI.pendingResult = { score: `${UI.wodAmrapReps} reps` };
+    } else if (w.format === 'amrap_buyin') {
+      const buyIn = fmtClock(UI.wodBuyInMs || 0);
+      UI.pendingResult = { score: `${UI.wodAmrapRounds}+${UI.wodAmrapReps} (buy-in ${buyIn})` };
+    } else {
+      UI.pendingResult = { score: `${UI.wodAmrapRounds}+${UI.wodAmrapReps}` };
+    }
     this.goToRating('wod');
   },
+
+  // Buy-in for AMRAP with Buy-In: an up-timer clocks the task, then this swaps
+  // in a fresh down-timer for the AMRAP proper.
+  amrapBuyInDone() {
+    UI.wodBuyInMs = UI.timer ? UI.timer.elapsedMs() : 0;
+    Feedback.roundChange();
+    if (UI.timer) UI.timer.destroy();
+    UI.wodPhase = 'amrap';
+    const w = Store.state.today.wod;
+    UI.timer = makeTimerFor('wod', Store.state.today);
+    UI.timerKind = 'entry';
+    UI.timer.start(); UI.running = true;
+    render(); persistExec();
+  },
+
+  // Ascending AMRAP: tapping through climbs the rung ladder; the cap ends it.
+  ascendingRoundDone() {
+    const w = Store.state.today.wod;
+    Feedback.roundChange();
+    UI.wodLastCompletedRung = UI.wodRung;
+    UI.wodRung += (w.increment || 1);
+    render(); persistExec();
+  },
+  finishAscending() {
+    UI.pendingResult = { score: `${UI.wodLastCompletedRung} rungs` };
+    this.goToRating('wod');
+  },
+
+  // Multiple AMRAP Intervals: work timer -> capture score -> rest timer -> repeat.
+  advanceAmrapMultiFromWork() {
+    const w = Store.state.today.wod;
+    Feedback.complete();
+    UI.wodIntervalScores.push(`${UI.wodAmrapRounds}+${UI.wodAmrapReps}`);
+    if (UI.wodIntervalIndex >= w.intervals) { this.finishAmrapMulti(); return; }
+    UI.wodPhase = 'rest';
+    if (UI.timer) UI.timer.destroy();
+    UI.timer = makeTimerFor('wod', Store.state.today);
+    UI.timer.start();
+    render(); persistExec();
+  },
+  advanceAmrapMultiFromRest() {
+    const w = Store.state.today.wod;
+    Feedback.roundChange();
+    UI.wodIntervalIndex += 1;
+    UI.wodAmrapRounds = 0; UI.wodAmrapReps = 0;
+    UI.wodPhase = 'work';
+    if (UI.timer) UI.timer.destroy();
+    UI.timer = makeTimerFor('wod', Store.state.today);
+    UI.timer.start(); UI.running = true;
+    render(); persistExec();
+  },
+  skipIntervalRest() { this.advanceAmrapMultiFromRest(); },
+  finishIntervalEarly() {
+    if (UI.wodPhase === 'rest') { this.finishAmrapMulti(); return; }
+    this.advanceAmrapMultiFromWork();
+  },
+  finishAmrapMulti() {
+    UI.pendingResult = { score: UI.wodIntervalScores.join(', ') };
+    this.goToRating('wod');
+  },
+
+  // For Time Repeats: each repeat is its own for-time clock, with rest between.
+  repeatDone() {
+    const w = Store.state.today.wod;
+    const t = fmtClock(UI.timer ? UI.timer.elapsedMs() : 0);
+    UI.wodRepeatTimes.push(t);
+    if (UI.wodRepeatIndex >= w.repeats) {
+      UI.pendingResult = { score: UI.wodRepeatTimes.join(', ') };
+      this.goToRating('wod');
+      return;
+    }
+    Feedback.complete();
+    UI.wodPhase = 'rest';
+    if (UI.timer) UI.timer.destroy();
+    UI.timer = makeTimerFor('wod', Store.state.today);
+    UI.timer.start();
+    render(); persistExec();
+  },
+  advanceRepeatFromRest() {
+    Feedback.roundChange();
+    UI.wodRepeatIndex += 1;
+    UI.wodPhase = null;
+    if (UI.timer) UI.timer.destroy();
+    UI.timer = makeTimerFor('wod', Store.state.today);
+    UI.timer.start(); UI.running = true;
+    render(); persistExec();
+  },
+  skipRepeatRest() { this.advanceRepeatFromRest(); },
+
+  // RFT with Bookends: one continuous clock across buy-in -> rounds -> buy-out.
+  rftBookendBuyInDone() {
+    Feedback.roundChange();
+    UI.wodPhase = 'main';
+    render(); persistExec();
+  },
+  rftBookendRoundDone() {
+    const w = Store.state.today.wod;
+    if (UI.wodRftRound + 1 >= w.rounds) {
+      Feedback.roundChange();
+      UI.wodPhase = 'buyout';
+      render(); persistExec();
+      return;
+    }
+    UI.wodRftRound += 1;
+    render(); persistExec();
+  },
+
   advanceWodEmom() {
     const w = Store.state.today.wod;
-    if (UI.bRoundIndex >= w.rounds) {
+    if (w.rounds && UI.bRoundIndex >= w.rounds) {
       UI.pendingResult = { score: `${w.rounds} rounds` };
       this.goToRating('wod');
       return;
@@ -1034,6 +1293,10 @@ const App = {
     render(); persistExec();
   },
   wodSkipRound() { this.advanceWodEmom(); },
+  finishOpenEmom() {
+    UI.pendingResult = { score: `${UI.bRoundIndex} minutes` };
+    this.goToRating('wod');
+  },
 
   advanceCorePhase() {
     const c = Store.state.today.core;

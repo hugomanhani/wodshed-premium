@@ -263,8 +263,13 @@ const SKILL_TEMPLATES = {
 
 // ─── Extra Core templates (Tabata / holds / straight rep work) ─────────────
 const CORE_TEMPLATES = [
+  // Alternating Tabata — two moves swap every round.
   { id: 'core_tabata1', shape: 'tabata', rounds: 8, workSec: 20, restSec: 10, moves: ['hollow_rock', 'superman_hold'] },
   { id: 'core_tabata2', shape: 'tabata', rounds: 8, workSec: 20, restSec: 10, moves: ['plank_hold', 'side_plank'] },
+  // Standard Tabata — one move for all 8 rounds.
+  { id: 'core_tabata_std1', shape: 'tabata', rounds: 8, workSec: 20, restSec: 10, moves: ['hollow_rock'] },
+  { id: 'core_tabata_std2', shape: 'tabata', rounds: 8, workSec: 20, restSec: 10, moves: ['mtn_climber'] },
+  { id: 'core_tabata_std3', shape: 'tabata', rounds: 8, workSec: 20, restSec: 10, moves: ['situp'] },
   { id: 'core_holds', shape: 'holds', rounds: 3, holdSec: 45, restSec: 30, moves: ['plank_hold', 'glute_bridge'] },
   { id: 'core_straight', shape: 'straight', rounds: 3, reps: 20, moves: ['situp', 'vup', 'russian_twist'] },
   { id: 'core_straight2', shape: 'straight', rounds: 3, reps: 15, moves: ['flutter_kick', 'bicycle_crunch', 'mtn_climber'] },
