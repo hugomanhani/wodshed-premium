@@ -102,7 +102,7 @@ function railHtml(plan, opts) {
 
 // ─── Onboarding / Equipment picker ─────────────────────────────────────────
 
-const PRESET_ORDER = ['fullbox', 'garage', 'minimal', 'bodyweight'];
+const PRESET_ORDER = ['mygarage', 'fullbox', 'garage', 'minimal', 'bodyweight'];
 
 function equipmentPickerHtml() {
   const equip = Store.state.equipment;
@@ -147,7 +147,7 @@ function renderOnboarding() {
     <div class="onboard-header">
       <div class="onboard-kicker">Welcome</div>
       <h1>Set up your gym</h1>
-      <p class="section-sub" style="padding:0;margin-top:8px">We've switched everything on. Turn off anything you don't have — you can change this anytime from Equipment.</p>
+      <p class="section-sub" style="padding:0;margin-top:8px">We've started with a typical garage setup — rack, rings, kettlebell, barbell, jump rope, and mobility tools. Turn off anything you don't have, add more, or go bodyweight-only. You can change this anytime from Equipment.</p>
     </div>
     <div class="scroll-content">${equipmentPickerHtml()}</div>
     <div class="onboard-footer">
@@ -694,7 +694,7 @@ function restoreExecIfAny() {
 const App = {
   init() {
     if (!Store.state.onboarded && Store.state.equipment.length === 0) {
-      Store.state.equipment = ALL_EQUIPMENT.slice();
+      Store.state.equipment = EQUIPMENT_PRESETS.mygarage.items.slice();
     }
     UI.screen = Store.state.onboarded ? 'today' : 'onboarding';
     if (Store.state.onboarded) {

@@ -43,12 +43,17 @@ const EQUIPMENT_GROUPS = [
     { id: 'jumprope', label: 'Jump Rope' },
     { id: 'bands', label: 'Resistance Bands' },
   ]},
+  { id: 'mobility', label: 'Mobility & Recovery', items: [
+    { id: 'pvc', label: 'PVC Pipe' },
+    { id: 'yogamat', label: 'Yoga Mat' },
+  ]},
 ];
 
 const ALL_EQUIPMENT = EQUIPMENT_GROUPS.flatMap(g => g.items.map(i => i.id));
 
 const EQUIPMENT_PRESETS = {
   bodyweight: { label: 'Bodyweight Only', desc: 'Nothing — travel, hotel rooms, anywhere', items: [] },
+  mygarage: { label: 'My Garage', desc: 'Rack, rings, kettlebell, barbell, jump rope, PVC pipe, yoga mat', items: ['rack', 'rings', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'] },
   minimal: { label: 'Minimal Garage', desc: 'Barbell, kettlebell, pull-up bar, jump rope', items: ['barbell', 'kettlebell', 'pullupbar', 'jumprope'] },
   garage: { label: 'Full Garage Gym', desc: 'Barbell, rack, kettlebells, dumbbells, rig, rings, jump rope, plyo box', items: ['barbell', 'rack', 'bench', 'kettlebell', 'dumbbell', 'pullupbar', 'rings', 'jumprope', 'plyobox', 'abmat'] },
   fullbox: { label: 'Full Box / Commercial Gym', desc: 'Everything, including rower, bike, GHD, wall balls, climbing rope', items: ALL_EQUIPMENT.slice() },
