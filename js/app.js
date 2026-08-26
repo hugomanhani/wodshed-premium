@@ -13,6 +13,7 @@ const ICON = {
   gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.7a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10.5a1.7 1.7 0 0 0 1-1.55V4.3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10.5a1.7 1.7 0 0 0 1.55 1H19.7a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>',
   sound: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 0 1 0 8"/></svg>',
   muted: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>',
+  reroll: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 0 0 6.4 6.3M4 13a8 8 0 0 0 13.6 4.6"/><polyline points="4,4 4,9 9,9"/><polyline points="20,20 20,15 15,15"/></svg>',
 };
 
 // One icon per equipment id, all sharing the same stroke weight/viewBox so the
@@ -137,18 +138,16 @@ function railHtml(plan, opts) {
 
 // ─── Onboarding / Equipment picker ─────────────────────────────────────────
 
-const PRESET_ORDER = ['mygarage', 'fullbox', 'garage', 'minimal', 'bodyweight'];
-
 function equipmentPickerHtml() {
   const equip = Store.state.equipment;
   const total = ALL_EQUIPMENT.length;
   const pct = computeAccessPercent(equip);
 
-  const presetChips = PRESET_ORDER.map(key => {
-    const p = EQUIPMENT_PRESETS[key];
+  const savedChips = Store.state.customPresets.map(p => {
     const isActive = sameSet(equip, p.items);
-    return `<div class="preset-chip ${isActive ? 'active' : ''}" onclick="App.applyPreset('${key}')">${p.label}</div>`;
+    return `<div class="preset-chip ${isActive ? 'active' : ''}" onclick="App.tapCustomPreset('${p.id}')">${p.label}</div>`;
   }).join('');
+  const presetChips = savedChips + `<div class="preset-chip preset-chip-new" onclick="App.saveCurrentAsPreset()">+ New Preset</div>`;
 
   const groups = EQUIPMENT_GROUPS.map(g => {
     const tiles = g.items.map(it => {
@@ -343,6 +342,7 @@ function estimateSessionMinutes(plan) {
 function renderToday() {
   const plan = Store.state.today;
   const doneCount = SECTION_ORDER.filter(s => plan.completed[s]).length;
+  const startLabel = doneCount === 0 ? 'Start Session' : (doneCount === 4 ? 'Session Complete' : 'Resume Session');
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   const mins = estimateSessionMinutes(plan);
 
@@ -359,27 +359,7 @@ function renderToday() {
     </div>`;
   }
 
-  const featured = doneCount < 4 ? SECTION_ORDER.find(s => !plan.completed[s]) : null;
-  let mainPanel;
-  if (!featured) {
-    mainPanel = `<div class="up-next-panel is-done">
-      <div class="up-next-kicker">Session complete</div>
-      <h2>Nice work today.</h2>
-      <p class="section-sub" style="padding:0">Your next focus is queued up for tomorrow.</p>
-    </div>`;
-  } else {
-    const { title, meta } = sectionInfo(featured, plan);
-    const kicker = doneCount === 0 ? 'Up first' : 'Up next';
-    const verb = doneCount === 0 ? 'Start' : 'Resume';
-    mainPanel = `<div class="up-next-panel">
-      <div class="up-next-kicker">${kicker}</div>
-      <h2>${title}</h2>
-      <p class="up-next-meta">${meta}</p>
-      <button class="btn btn-primary btn-block" onclick="App.enterExec('${featured}')">${ICON.play} ${verb} ${SECTION_TITLES[featured]}</button>
-    </div>`;
-  }
-
-  const refRows = SECTION_ORDER.filter(s => s !== featured).map(s => refRowHtml(s, plan)).join('');
+  const cards = SECTION_ORDER.map(s => sectionCardHtml(s, plan)).join('');
 
   return `
     <div class="topbar">
@@ -389,25 +369,36 @@ function renderToday() {
       </div>
       <span class="tag tag-focus-${plan.focus}">${FOCUS_LABELS[plan.focus].toUpperCase()}</span>
     </div>
-    ${railHtml(plan)}
-    <div style="padding:0 var(--space-4) var(--space-4)">${mainPanel}</div>
+    <div style="padding:0 var(--space-4) var(--space-4)">
+      <button class="btn btn-primary btn-block" ${doneCount === 4 ? 'disabled' : ''} onclick="App.startOrResume()">
+        ${doneCount < 4 ? ICON.play : ICON.check} ${startLabel}
+      </button>
+    </div>
     ${banner}
-    <div class="ref-list">${refRows}</div>
+    <div class="card-list">${cards}</div>
     <div style="height:24px"></div>
   `;
 }
 
-function refRowHtml(section, plan) {
+function sectionCardHtml(section, plan) {
   const done = plan.completed[section];
   const rating = plan.ratings[section];
   const { title, meta } = sectionInfo(section, plan);
-  const right = done
+  const icon = done ? ICON.check : ICON.play;
+  const iconCls = done ? 'section-icon done' : 'section-icon';
+  const trailing = done
     ? `<span class="tag ${RATING_TAG_CLASS[rating]}">${RATING_LABEL[rating]}</span>`
-    : `<span class="ref-row-meta">${meta}</span>`;
-  return `<div class="ref-row ${done ? 'done' : ''}"${done ? '' : ` onclick="App.enterExec('${section}')"`}>
-    <span class="ref-row-dot">${done ? ICON.check : ''}</span>
-    <span class="ref-row-title">${title}</span>
-    ${right}
+    : `<div class="section-actions">
+        <button class="icon-btn-sm" onclick="event.stopPropagation(); App.regenerateSection('${section}')" title="Shuffle a new one">${ICON.reroll}</button>
+        <div class="chev">${ICON.chev}</div>
+      </div>`;
+  return `<div class="section-card ${done ? 'disabled' : ''}" onclick="${done ? '' : `App.enterExec('${section}')`}">
+    <div class="${iconCls}">${icon}</div>
+    <div class="section-body">
+      <div class="section-title">${title}</div>
+      <div class="section-meta">${meta}</div>
+    </div>
+    ${trailing}
   </div>`;
 }
 
@@ -944,7 +935,7 @@ function restoreExecIfAny() {
 const App = {
   init() {
     if (!Store.state.onboarded && Store.state.equipment.length === 0) {
-      Store.state.equipment = EQUIPMENT_PRESETS.mygarage.items.slice();
+      Store.state.equipment = DEFAULT_EQUIPMENT.slice();
     }
     UI.screen = Store.state.onboarded ? 'today' : 'onboarding';
     if (Store.state.onboarded) {
@@ -972,8 +963,24 @@ const App = {
   showInfo(key) { UI.dialog = key; render(); },
   closeDialog() { UI.dialog = null; render(); },
 
-  applyPreset(key) {
-    Store.state.equipment = EQUIPMENT_PRESETS[key].items.slice();
+  tapCustomPreset(id) {
+    const p = Store.state.customPresets.find(x => x.id === id);
+    if (!p) return;
+    if (sameSet(Store.state.equipment, p.items)) {
+      if (confirm(`Delete preset "${p.label}"?`)) {
+        Store.state.customPresets = Store.state.customPresets.filter(x => x.id !== id);
+        Store.save();
+      }
+    } else {
+      Store.state.equipment = p.items.slice();
+      Store.save();
+    }
+    render();
+  },
+  saveCurrentAsPreset() {
+    const name = prompt('Name this equipment preset:');
+    if (!name || !name.trim()) return;
+    Store.state.customPresets.push({ id: 'custom_' + Date.now(), label: name.trim(), items: Store.state.equipment.slice() });
     Store.save(); render();
   },
   toggleEquip(id) {
@@ -1022,6 +1029,22 @@ const App = {
     const plan = Store.state.today;
     const next = SECTION_ORDER.find(s => !plan.completed[s]);
     if (next) this.enterExec(next);
+  },
+
+  // Re-rolls just one section of today's plan — the LRU-based pickers used by
+  // every generateX naturally favor whatever wasn't just used, so this reliably
+  // surfaces a different template/movement set without touching the rest of the day.
+  regenerateSection(section) {
+    const state = Store.state;
+    const plan = state.today;
+    const equip = state.equipment;
+    if (section === 'warmup') plan.warmup = generateWarmup(state, equip);
+    else if (section === 'skill') plan.skill = generateSkill(state, plan.focus, equip);
+    else if (section === 'wod') {
+      plan.wod = generateWod(state, plan.focus, equip);
+      plan.isBenchmark = false; plan.benchmarkId = null; plan.benchmarkName = null;
+    } else if (section === 'core') plan.core = generateCore(state, equip);
+    Store.save(); render();
   },
 
   enterExec(section) {

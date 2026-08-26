@@ -55,13 +55,9 @@ const ALL_EQUIPMENT = EQUIPMENT_GROUPS.flatMap(g => g.items.map(i => i.id));
 const PLATE_SIZES = [45, 35, 25, 15, 10, 5, 2.5];
 const STANDARD_BAR_WEIGHT = 45;
 
-const EQUIPMENT_PRESETS = {
-  bodyweight: { label: 'Bodyweight Only', desc: 'Nothing — travel, hotel rooms, anywhere', items: [] },
-  mygarage: { label: 'My Garage', desc: 'Rack, rings, kettlebell, barbell, jump rope, PVC pipe, yoga mat', items: ['rack', 'rings', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'] },
-  minimal: { label: 'Minimal Garage', desc: 'Barbell, kettlebell, pull-up bar, jump rope', items: ['barbell', 'kettlebell', 'pullupbar', 'jumprope'] },
-  garage: { label: 'Full Garage Gym', desc: 'Barbell, rack, kettlebells, dumbbells, rig, rings, jump rope, plyo box', items: ['barbell', 'rack', 'bench', 'kettlebell', 'dumbbell', 'pullupbar', 'rings', 'jumprope', 'plyobox', 'abmat'] },
-  fullbox: { label: 'Full Box / Commercial Gym', desc: 'Everything, including rower, bike, GHD, wall balls, climbing rope', items: ALL_EQUIPMENT.slice() },
-};
+// Starting equipment for a first-time install — a typical garage setup.
+// No other built-in presets: users build their own from the Equipment tab.
+const DEFAULT_EQUIPMENT = ['rack', 'rings', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'];
 
 const FOCUSES = ['strength', 'gymnastics', 'weightlifting', 'accessory', 'conditioning'];
 const FOCUS_LABELS = {
