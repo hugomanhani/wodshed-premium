@@ -16,13 +16,15 @@ const ICON = {
 };
 
 // Canonical copy, kept in one place so labels stay identical everywhere they
-// appear (section cards, exec header, rating screen, history, summary).
+// appear (section rows, exec header, rating sheet, history, summary).
+const SECTION_ORDER = ['warmup', 'skill', 'wod', 'core'];
 const SECTION_TITLES = { warmup: 'Warm-Up', skill: 'Skill', wod: 'WOD', core: 'Core' };
 const RATING_LABEL = { easy: 'Easy', right: 'Just Right', hard: 'Too Hard' };
 const RATING_TAG_CLASS = { easy: 'tag-good', right: 'tag-neutral', hard: 'tag-warn' };
 
 const UI = {
   screen: 'boot', tab: 'today', execSection: null, timer: null, timerKind: null, dialog: null, leadIn: null,
+  ratingFor: null,
   warmupChecks: [], skillSetIndex: 0, skillWeight: 0, skillResting: false, skillRoundIndex: 1,
   bRoundIndex: 1, wodElapsed: 0, wodStepIndex: 0, wodRftRound: 0, wodAmrapRounds: 0, wodAmrapReps: 0,
   coreRound: 1, corePhase: 'work', coreChecks: [], pendingResult: null, running: false,
@@ -43,11 +45,11 @@ function render() {
   if (UI.screen === 'onboarding') html = renderOnboarding();
   else if (UI.screen === 'today') html = renderShell(renderToday(), 'today');
   else if (UI.screen === 'exec') html = renderExecScreen();
-  else if (UI.screen === 'rating') html = renderRating();
   else if (UI.screen === 'summary') html = renderSummary();
   else if (UI.screen === 'history') html = renderShell(renderHistory(), 'history');
   else if (UI.screen === 'equipment') html = renderShell(renderEquipmentTab(), 'equipment');
 
+  if (UI.ratingFor) html += renderRatingSheet();
   if (UI.dialog) html += renderDialog();
   root.innerHTML = html;
 }
@@ -73,6 +75,29 @@ function renderDialog() {
       <button class="btn btn-primary btn-block" onclick="App.closeDialog()">Got it</button>
     </div>
   </div>`;
+}
+
+// ─── Session rail — the throughline shown on Today (full, tappable) and, in
+// a compact dot-only form, pinned to every exec screen so you always know
+// where you are in the whole session without leaving what you're doing ────
+
+function railHtml(plan, opts) {
+  opts = opts || {};
+  const nextIncomplete = SECTION_ORDER.find(s => !plan.completed[s]);
+  const nodes = SECTION_ORDER.map((s, i) => {
+    const done = plan.completed[s];
+    const isCurrent = !done && s === (opts.current || nextIncomplete);
+    const cls = ['rail-node'];
+    if (done) cls.push('done');
+    if (isCurrent) cls.push('current');
+    const clickable = (!done && !opts.compact) ? ` onclick="App.enterExec('${s}')"` : '';
+    const dot = done ? ICON.check : (i + 1);
+    return `<div class="${cls.join(' ')}"${clickable}>
+      <div class="rail-dot">${dot}</div>
+      ${opts.compact ? '' : `<div class="rail-label">${SECTION_TITLES[s]}</div>`}
+    </div>`;
+  }).join('');
+  return `<div class="rail ${opts.compact ? 'rail-compact' : ''}"><div class="rail-line"></div>${nodes}</div>`;
 }
 
 // ─── Onboarding / Equipment picker ─────────────────────────────────────────
@@ -147,18 +172,63 @@ function renderEquipmentTab() {
   </div>`;
 }
 
+// ─── Section copy + rough duration estimate ───────────────────────────────
+
+function sectionInfo(section, plan) {
+  if (section === 'warmup') {
+    return { title: 'Warm-Up', meta: `2 Rounds · ${plan.warmup.moves.map(m => exerciseById(m).name).join(', ')}` };
+  }
+  if (section === 'skill') {
+    return { title: 'Skill' + (plan.skill.liftName ? ' · ' + plan.skill.liftName : ''), meta: skillMetaLine(plan.skill) };
+  }
+  if (section === 'wod') {
+    return { title: 'WOD · ' + (plan.isBenchmark ? plan.benchmarkName : plan.wod.label), meta: `${plan.wod.badge} · ${plan.wod.movements}` };
+  }
+  return { title: 'Core', meta: coreMetaLine(plan.core) };
+}
+
+function skillMetaLine(skill) {
+  if (skill.shape === 'A') return `${skill.scheme.length} Sets · ${skill.scheme.join('-')}`;
+  if (skill.shape === 'B') return `EMOM ${skill.rounds}' · ${skill.oddName} / ${skill.evenName}`;
+  return `${skill.rounds} Rounds · ${skill.moveNames.join(', ')}`;
+}
+function coreMetaLine(core) {
+  if (core.shape === 'tabata') return `Tabata · ${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(' / ')}`;
+  if (core.shape === 'holds') return `${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(' / ')} Hold`;
+  return `${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(', ')}`;
+}
+
+function estimateSectionMinutes(section, plan) {
+  if (section === 'warmup') return 6;
+  if (section === 'skill') {
+    const s = plan.skill;
+    if (s.shape === 'A') return Math.round(s.scheme.length * ((s.rest || 90) + 25) / 60);
+    if (s.shape === 'B') return Math.round(s.intervalSec * s.rounds / 60);
+    return Math.round(s.rounds * ((s.rest || 60) + 40) / 60);
+  }
+  if (section === 'wod') {
+    const w = plan.wod;
+    if (w.capSec) return Math.round(w.capSec / 60);
+    if (w.format === 'rft') return Math.round(w.rounds * 2.2);
+    return 12;
+  }
+  // core
+  const c = plan.core;
+  if (c.shape === 'tabata') return Math.round(c.rounds * (c.workSec + c.restSec) / 60);
+  if (c.shape === 'holds') return Math.round(c.rounds * (c.holdSec + c.restSec) / 60);
+  return 5;
+}
+function estimateSessionMinutes(plan) {
+  return SECTION_ORDER.reduce((sum, s) => sum + estimateSectionMinutes(s, plan), 0);
+}
+
 // ─── Today screen ───────────────────────────────────────────────────────────
 
 function renderToday() {
   const plan = Store.state.today;
-  const order = ['warmup', 'skill', 'wod', 'core'];
-  const doneCount = order.filter(s => plan.completed[s]).length;
-  const startLabel = doneCount === 0 ? 'Start Session' : (doneCount === 4 ? 'Session Complete' : 'Resume Session');
+  const doneCount = SECTION_ORDER.filter(s => plan.completed[s]).length;
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-
-  const segs = order.map(s => `<div class="progress-seg ${plan.completed[s] ? 'done' : ''}"></div>`).join('');
-
-  const cards = order.map(s => sectionCardHtml(s, plan)).join('');
+  const mins = estimateSessionMinutes(plan);
 
   let banner = '';
   if (plan.benchmarkOffer && !plan.isBenchmark && !plan.completed.wod) {
@@ -173,74 +243,67 @@ function renderToday() {
     </div>`;
   }
 
+  const featured = doneCount < 4 ? SECTION_ORDER.find(s => !plan.completed[s]) : null;
+  let mainPanel;
+  if (!featured) {
+    mainPanel = `<div class="up-next-panel is-done">
+      <div class="up-next-kicker">Session complete</div>
+      <h2>Nice work today.</h2>
+      <p class="section-sub" style="padding:0">Your next focus is queued up for tomorrow.</p>
+    </div>`;
+  } else {
+    const { title, meta } = sectionInfo(featured, plan);
+    const kicker = doneCount === 0 ? 'Up first' : 'Up next';
+    const verb = doneCount === 0 ? 'Start' : 'Resume';
+    mainPanel = `<div class="up-next-panel">
+      <div class="up-next-kicker">${kicker}</div>
+      <h2>${title}</h2>
+      <p class="up-next-meta">${meta}</p>
+      <button class="btn btn-primary btn-block" onclick="App.enterExec('${featured}')">${ICON.play} ${verb} ${SECTION_TITLES[featured]}</button>
+    </div>`;
+  }
+
+  const refRows = SECTION_ORDER.filter(s => s !== featured).map(s => refRowHtml(s, plan)).join('');
+
   return `
     <div class="topbar">
       <div>
-        <div class="date-label">${dateStr}</div>
+        <div class="date-label">${dateStr} · ~${mins} MIN</div>
         <h1>Today</h1>
       </div>
-      <span class="tag tag-focus-${plan.focus}">${FOCUS_LABELS[plan.focus].toUpperCase()} FOCUS</span>
+      <span class="tag tag-focus-${plan.focus}">${FOCUS_LABELS[plan.focus].toUpperCase()}</span>
     </div>
-    <div class="progress-row">${segs}</div>
-    <div style="padding:0 var(--space-4) var(--space-4)">
-      <button class="btn btn-primary btn-block" ${doneCount === 4 ? 'disabled' : ''} onclick="App.startOrResume()">
-        ${doneCount < 4 ? ICON.play : ICON.check} ${startLabel}
-      </button>
-    </div>
+    ${railHtml(plan)}
+    <div style="padding:0 var(--space-4) var(--space-4)">${mainPanel}</div>
     ${banner}
-    <div class="card-list">${cards}</div>
+    <div class="ref-list">${refRows}</div>
     <div style="height:24px"></div>
   `;
 }
 
-function sectionCardHtml(section, plan) {
+function refRowHtml(section, plan) {
   const done = plan.completed[section];
   const rating = plan.ratings[section];
-  let title, meta;
-  if (section === 'warmup') { title = 'Warm-Up'; meta = `2 Rounds · ${plan.warmup.moves.map(m => exerciseById(m).name).join(', ')}`; }
-  else if (section === 'skill') {
-    title = 'Skill' + (plan.skill.liftName ? ' · ' + plan.skill.liftName : '');
-    meta = skillMetaLine(plan.skill);
-  } else if (section === 'wod') {
-    title = 'WOD · ' + (plan.isBenchmark ? plan.benchmarkName : plan.wod.label);
-    meta = `${plan.wod.badge} · ${plan.wod.movements}`;
-  } else { title = 'Core'; meta = coreMetaLine(plan.core); }
-
-  const icon = done ? ICON.check : ICON.play;
-  const iconCls = done ? 'section-icon done' : 'section-icon';
+  const { title, meta } = sectionInfo(section, plan);
   const right = done
     ? `<span class="tag ${RATING_TAG_CLASS[rating]}">${RATING_LABEL[rating]}</span>`
-    : ICON.chev;
-
-  return `<div class="section-card ${done ? 'disabled' : ''}" onclick="${done ? '' : `App.enterExec('${section}')`}">
-    <div class="${iconCls}">${icon}</div>
-    <div class="section-body">
-      <div class="section-title">${title}</div>
-      <div class="section-meta">${meta}</div>
-    </div>
-    <div class="chev">${right}</div>
+    : `<span class="ref-row-meta">${meta}</span>`;
+  return `<div class="ref-row ${done ? 'done' : ''}"${done ? '' : ` onclick="App.enterExec('${section}')"`}>
+    <span class="ref-row-dot">${done ? ICON.check : ''}</span>
+    <span class="ref-row-title">${title}</span>
+    ${right}
   </div>`;
-}
-
-function skillMetaLine(skill) {
-  if (skill.shape === 'A') return `${skill.scheme.length} Sets · ${skill.scheme.join('-')}`;
-  if (skill.shape === 'B') return `EMOM ${skill.rounds}' · ${skill.oddName} / ${skill.evenName}`;
-  return `${skill.rounds} Rounds · ${skill.moveNames.join(', ')}`;
-}
-function coreMetaLine(core) {
-  if (core.shape === 'tabata') return `Tabata · ${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(' / ')}`;
-  if (core.shape === 'holds') return `${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(' / ')} Hold`;
-  return `${core.rounds} Rounds · ${core.moves.map(m => exerciseById(m).name).join(', ')}`;
 }
 
 // ─── Execution screens ───────────────────────────────────────────────────
 
-function execHeader(title, infoKey) {
+function execHeader(plan, title, infoKey) {
   return `<div class="exec-header">
     <button class="btn btn-icon btn-ghost" onclick="App.exitExec()">${ICON.back}</button>
     <div class="kicker">${title}${infoKey ? infoBtn(infoKey) : ''}</div>
     <div style="width:44px"></div>
-  </div>`;
+  </div>
+  ${railHtml(plan, { compact: true, current: UI.execSection })}`;
 }
 
 function playPauseBtn(big) {
@@ -262,15 +325,15 @@ function renderExecScreen() {
   const section = UI.execSection;
   const title = SECTION_TITLES[section].toUpperCase();
 
-  if (UI.leadIn !== null) return `<div class="screen no-nav">${execHeader(title)}${leadInHtml()}</div>`;
+  if (UI.leadIn !== null) return `<div class="screen no-nav">${execHeader(plan, title)}${leadInHtml()}</div>`;
 
-  if (section === 'warmup') return `<div class="screen no-nav">${execHeader(title)}${renderWarmupBody(plan.warmup)}</div>`;
-  if (section === 'skill') return `<div class="screen no-nav">${execHeader(title)}${renderSkillBody(plan.skill)}</div>`;
+  if (section === 'warmup') return `<div class="screen no-nav">${execHeader(plan, title)}${renderWarmupBody(plan.warmup)}</div>`;
+  if (section === 'skill') return `<div class="screen no-nav">${execHeader(plan, title)}${renderSkillBody(plan.skill)}</div>`;
   if (section === 'wod') {
     const fmtKey = plan.wod.format.toUpperCase() === 'FORTIME' ? 'FORTIME' : plan.wod.format.toUpperCase();
-    return `<div class="screen no-nav">${execHeader(title, fmtKey)}${renderWodBody(plan.wod, plan)}</div>`;
+    return `<div class="screen no-nav">${execHeader(plan, title, fmtKey)}${renderWodBody(plan.wod, plan)}</div>`;
   }
-  if (section === 'core') return `<div class="screen no-nav">${execHeader(title)}${renderCoreBody(plan.core)}</div>`;
+  if (section === 'core') return `<div class="screen no-nav">${execHeader(plan, title)}${renderCoreBody(plan.core)}</div>`;
   return '';
 }
 
@@ -305,7 +368,7 @@ function renderSkillBody(skill) {
     return `<div class="exec-body">
       <div class="time-label">${skill.liftName}</div>
       <div class="section-meta">SET ${UI.skillSetIndex + 1} / ${skill.scheme.length}</div>
-      <div class="big-time">${reps}<span style="font-size:18px;color:var(--color-neutral-500)"> reps</span></div>
+      <div class="big-time">${reps}<span class="big-time-unit"> reps</span></div>
       <div class="weight-row">
         <button class="stepper-btn" onclick="App.adjustWeight(-1)">−</button>
         <div class="weight-value">${UI.skillWeight}<span class="unit"> lb</span></div>
@@ -358,7 +421,7 @@ function renderWodBody(wod, plan) {
       <div class="card wod-line"><div>${wod.movements}</div></div>
       <div class="section-meta">ROUND ${UI.wodStepIndex + 1} / ${wod.steps.length} · ${wod.steps.join('–')}</div>
       <div class="big-time">${step}</div>
-      <div class="mid-time" id="wodTime" style="color:var(--color-neutral-400)">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
+      <div class="mid-time mid-time-dim" id="wodTime">${fmtClock(UI.timer ? UI.timer.elapsedMs() : 0)}</div>
       ${capTagHtml(UI.timer ? UI.timer.elapsedMs() : 0, wod.capSec)}
       <div class="action-row">
         ${playPauseBtn(false)}
@@ -408,7 +471,7 @@ function renderWodBody(wod, plan) {
           </div>
         </div>
       </div>
-      <div style="margin-top:auto;display:flex;gap:12px;align-items:center">
+      <div class="action-row" style="margin-top:auto">
         ${playPauseBtn(true)}
         <button class="btn btn-ghost" onclick="App.finishAmrap()">Finish Early</button>
       </div>
@@ -420,7 +483,7 @@ function renderWodBody(wod, plan) {
   const isLastRound = UI.bRoundIndex >= wod.rounds;
   return `<div class="exec-body">
     <div class="time-label">MIN ${UI.bRoundIndex} / ${wod.rounds}</div>
-    <div class="section-meta" style="text-align:center">${line}</div>
+    <div class="section-meta">${line}</div>
     <div class="big-time" id="bTime">${fmtClock(UI.timer ? UI.timer.remainingMs() : 0)}</div>
     ${playPauseBtn(true)}
     <button class="btn btn-ghost" style="margin-top:auto" onclick="App.wodSkipRound()">${isLastRound ? 'Finish WOD' : 'Skip to Next Minute'}</button>
@@ -431,10 +494,10 @@ function renderCoreBody(core) {
   if (core.shape === 'tabata' || core.shape === 'holds') {
     const moveName = exerciseById(core.moves[(UI.coreRound - 1) % core.moves.length]).name;
     const phaseLabel = UI.corePhase === 'work' || UI.corePhase === 'hold' ? (core.shape === 'tabata' ? 'WORK' : 'HOLD') : 'REST';
-    return `<div class="exec-body" style="justify-content:center">
+    return `<div class="exec-body">
       <span class="tag ${UI.corePhase === 'rest' ? 'tag-neutral' : 'tag-accent'}">${phaseLabel}</span>
       <div class="section-meta">${moveName}</div>
-      <div class="big-time" style="font-size:88px" id="coreTime">${Math.ceil((UI.timer ? UI.timer.remainingMs() : 0) / 1000)}</div>
+      <div class="big-time big-time-huge" id="coreTime">${Math.ceil((UI.timer ? UI.timer.remainingMs() : 0) / 1000)}</div>
       <div class="time-label">ROUND ${UI.coreRound} / ${core.rounds}</div>
       ${playPauseBtn(true)}
     </div>`;
@@ -457,13 +520,28 @@ function renderCoreBody(core) {
   </div>`;
 }
 
-// ─── Rating / Summary ───────────────────────────────────────────────────────
+// ─── Rating sheet / Summary ─────────────────────────────────────────────────
+// Rating is an overlay, not a route: the just-finished exec screen stays mounted
+// (frozen — see goToRating) behind a dimmed sheet, so you can still see the score
+// or checklist you ended on while you rate it, and there's one less hard screen
+// change per section.
 
-function renderRating() {
-  return `<div class="screen no-nav">
-    <div class="rating-screen">
-      <span class="tag tag-neutral">${SECTION_TITLES[UI.execSection].toUpperCase()} COMPLETE</span>
-      <h3>How did that feel?</h3>
+function ratingResultLine(section) {
+  const r = UI.pendingResult || {};
+  if (section === 'wod' && r.score) return `Score: ${r.score}`;
+  if (section === 'skill' && r.weight != null) return `${r.weight} lb${r.reps ? ' × ' + r.reps : ''}`;
+  if (section === 'warmup' && r.total) return `${r.checked} of ${r.total} moves logged`;
+  return '';
+}
+
+function renderRatingSheet() {
+  const section = UI.ratingFor;
+  const resultLine = ratingResultLine(section);
+  return `<div class="dialog-backdrop">
+    <div class="dialog rating-sheet">
+      <div class="tag tag-neutral">${SECTION_TITLES[section].toUpperCase()} DONE</div>
+      ${resultLine ? `<div class="rating-result">${resultLine}</div>` : ''}
+      <div class="dialog-title">How did that feel?</div>
       <div class="rating-buttons">
         <button class="btn btn-secondary btn-block" onclick="App.rate('easy')">Easy</button>
         <button class="btn btn-primary btn-block" onclick="App.rate('right')">Just Right</button>
@@ -475,8 +553,7 @@ function renderRating() {
 
 function renderSummary() {
   const plan = Store.state.today;
-  const order = ['warmup', 'skill', 'wod', 'core'];
-  const rows = order.map(s => `<div class="card summary-row">
+  const rows = SECTION_ORDER.map(s => `<div class="card summary-row">
     <div class="section-title" style="font-size:15px">${SECTION_TITLES[s]}</div>
     <span class="tag ${RATING_TAG_CLASS[plan.ratings[s]]}">${RATING_LABEL[plan.ratings[s]]}</span>
   </div>`).join('');
@@ -498,7 +575,7 @@ function renderHistory() {
     return `<div class="empty-state"><h3>No sessions yet</h3><p>Finish your first session and it'll show up here.</p></div>`;
   }
   const items = log.map(entry => {
-    const chips = ['warmup', 'skill', 'wod', 'core'].map(s => entry.ratings[s]
+    const chips = SECTION_ORDER.map(s => entry.ratings[s]
       ? `<span class="tag ${RATING_TAG_CLASS[entry.ratings[s]]}">${SECTION_TITLES[s]}: ${RATING_LABEL[entry.ratings[s]]}</span>` : '').join('');
     return `<div class="card history-item">
       <div class="history-top">
@@ -688,8 +765,7 @@ const App = {
 
   startOrResume() {
     const plan = Store.state.today;
-    const order = ['warmup', 'skill', 'wod', 'core'];
-    const next = order.find(s => !plan.completed[s]);
+    const next = SECTION_ORDER.find(s => !plan.completed[s]);
     if (next) this.enterExec(next);
   },
 
@@ -874,19 +950,24 @@ const App = {
     this.goToRating('core');
   },
 
+  // Rating no longer swaps the screen — it freezes the just-finished exec screen
+  // (pause, don't destroy, so the final time/score/checklist stays on display)
+  // and shows a dismiss-proof sheet on top of it.
   goToRating(section) {
-    if (UI.timer) { UI.timer.destroy(); UI.timer = null; }
+    if (UI.timer) UI.timer.pause();
+    UI.running = false;
     Feedback.complete();
     Store.state.execState = null; Store.save();
-    UI.execSection = section; UI.screen = 'rating';
+    UI.ratingFor = section;
     render();
   },
 
   rate(value) {
-    completeSection(Store.state, UI.execSection, value, UI.pendingResult);
+    const section = UI.ratingFor;
+    UI.ratingFor = null;
+    completeSection(Store.state, section, value, UI.pendingResult);
     const plan = Store.state.today;
-    const order = ['warmup', 'skill', 'wod', 'core'];
-    const next = order.find(s => !plan.completed[s]);
+    const next = SECTION_ORDER.find(s => !plan.completed[s]);
     if (next) this.enterExec(next);
     else { UI.screen = 'summary'; render(); }
   },
