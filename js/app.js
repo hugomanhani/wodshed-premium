@@ -15,6 +15,39 @@ const ICON = {
   muted: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>',
 };
 
+// One icon per equipment id, all sharing the same stroke weight/viewBox so the
+// picker grid reads as one consistent set rather than mismatched glyphs.
+function eqIcon(inner) {
+  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+const EQUIP_ICON = {
+  barbell: eqIcon('<line x1="1" y1="12" x2="23" y2="12"/><rect x="2" y="8" width="3" height="8" rx="1"/><rect x="19" y="8" width="3" height="8" rx="1"/>'),
+  rack: eqIcon('<line x1="5" y1="2" x2="5" y2="22"/><line x1="19" y1="2" x2="19" y2="22"/><line x1="5" y1="9" x2="19" y2="9"/>'),
+  bench: eqIcon('<rect x="3" y="12" width="18" height="3" rx="1"/><line x1="6" y1="15" x2="6" y2="20"/><line x1="18" y1="15" x2="18" y2="20"/>'),
+  kettlebell: eqIcon('<path d="M9 8.5a3 3 0 0 1 6 0V10H9z"/><circle cx="12" cy="15" r="6"/>'),
+  dumbbell: eqIcon('<line x1="8" y1="12" x2="16" y2="12"/><rect x="2" y="9" width="4" height="6" rx="1"/><rect x="18" y="9" width="4" height="6" rx="1"/>'),
+  pullupbar: eqIcon('<line x1="4" y1="6" x2="20" y2="6"/><line x1="5" y1="6" x2="5" y2="2"/><line x1="19" y1="6" x2="19" y2="2"/>'),
+  rings: eqIcon('<line x1="9" y1="4" x2="9" y2="11"/><line x1="15" y1="4" x2="15" y2="11"/><circle cx="9" cy="15" r="4"/><circle cx="15" cy="15" r="4"/>'),
+  parallettes: eqIcon('<line x1="3" y1="15" x2="9" y2="15"/><line x1="5" y1="15" x2="5" y2="20"/><line x1="7" y1="15" x2="7" y2="20"/><line x1="15" y1="15" x2="21" y2="15"/><line x1="17" y1="15" x2="17" y2="20"/><line x1="19" y1="15" x2="19" y2="20"/>'),
+  rope: eqIcon('<polyline points="9,2 15,6 9,10 15,14 9,18 15,22"/>'),
+  rower: eqIcon('<line x1="2" y1="18" x2="22" y2="18"/><rect x="8" y="13" width="5" height="4" rx="1"/><circle cx="19" cy="18" r="1.8"/>'),
+  bike: eqIcon('<circle cx="6" cy="17" r="3.2"/><circle cx="18" cy="17" r="3.2"/><path d="M6 17 10 8h5l3 9M10 8l3 4h5"/>'),
+  skierg: eqIcon('<line x1="12" y1="2" x2="12" y2="22"/><line x1="12" y1="8" x2="5" y2="5"/><line x1="12" y1="13" x2="19" y2="17"/>'),
+  treadmill: eqIcon('<rect x="2" y="15" width="14" height="4" rx="1"/><line x1="16" y1="17" x2="21" y2="6"/><circle cx="21" cy="5" r="1.4"/>'),
+  plyobox: eqIcon('<path d="M4 20V9l4-4h8l4 4v11z"/><path d="M4 9h16"/>'),
+  medball: eqIcon('<circle cx="12" cy="12" r="8.5"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/>'),
+  slamball: eqIcon('<circle cx="12" cy="12" r="8.5" fill="currentColor" opacity="0.18"/><circle cx="12" cy="12" r="8.5"/>'),
+  ghd: eqIcon('<path d="M3 19h6l3-6 3 6h6"/><line x1="12" y1="13" x2="12" y2="5"/>'),
+  abmat: eqIcon('<path d="M3 18a9 5 0 0 1 18 0"/>'),
+  sandbag: eqIcon('<path d="M8 5h8l3 4.5V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9.5z"/><line x1="9" y1="5" x2="9" y2="2"/><line x1="15" y1="5" x2="15" y2="2"/>'),
+  farmer: eqIcon('<line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><rect x="5" y="9" width="4" height="5" rx="1"/><rect x="15" y="9" width="4" height="5" rx="1"/>'),
+  sled: eqIcon('<path d="M2 18h7l11-6v6z"/><line x1="13" y1="12" x2="21" y2="3"/>'),
+  jumprope: eqIcon('<circle cx="5" cy="5" r="2.6"/><circle cx="19" cy="5" r="2.6"/><path d="M5 7.5C5 16 19 16 19 7.5"/>'),
+  bands: eqIcon('<ellipse cx="12" cy="12" rx="4.5" ry="9"/>'),
+  pvc: eqIcon('<line x1="3" y1="12" x2="21" y2="12"/><circle cx="3" cy="12" r="1.8"/><circle cx="21" cy="12" r="1.8"/>'),
+  yogamat: eqIcon('<rect x="2" y="9" width="15" height="6" rx="2"/><circle cx="19" cy="12" r="3"/>'),
+};
+
 // Canonical copy, kept in one place so labels stay identical everywhere they
 // appear (section rows, exec header, rating sheet, history, summary).
 const SECTION_ORDER = ['warmup', 'skill', 'wod', 'core'];
@@ -107,6 +140,7 @@ const PRESET_ORDER = ['mygarage', 'fullbox', 'garage', 'minimal', 'bodyweight'];
 function equipmentPickerHtml() {
   const equip = Store.state.equipment;
   const total = ALL_EQUIPMENT.length;
+  const pct = computeAccessPercent(equip);
 
   const presetChips = PRESET_ORDER.map(key => {
     const p = EQUIPMENT_PRESETS[key];
@@ -115,13 +149,14 @@ function equipmentPickerHtml() {
   }).join('');
 
   const groups = EQUIPMENT_GROUPS.map(g => {
-    const rows = g.items.map(it => {
+    const tiles = g.items.map(it => {
       const on = equip.includes(it.id);
-      return `<div class="equip-toggle" onclick="App.toggleEquip('${it.id}')">
-        <span>${it.label}</span><div class="switch ${on ? 'on' : ''}"></div>
+      return `<div class="equip-tile ${on ? 'on' : ''}" onclick="App.toggleEquip('${it.id}')">
+        <div class="equip-tile-icon">${EQUIP_ICON[it.id] || ''}</div>
+        <div class="equip-tile-label">${it.label}</div>
       </div>`;
     }).join('');
-    return `<div class="equip-group"><div class="equip-group-label">${g.label}</div>${rows}</div>`;
+    return `<div class="equip-group"><div class="equip-group-label">${g.label}</div><div class="equip-grid">${tiles}</div></div>`;
   }).join('');
 
   return `<div class="preset-row">${presetChips}</div>
@@ -133,13 +168,85 @@ function equipmentPickerHtml() {
       <button class="btn-link" onclick="App.setAllEquip(false)">None</button>
     </div>
   </div>
-  ${groups}`;
+  ${groups}
+  <div class="equip-access-bar">You've unlocked <strong>${pct}%</strong> of all movements</div>`;
 }
 
 function sameSet(a, b) {
   if (a.length !== b.length) return false;
   const sa = [...a].sort(), sb = [...b].sort();
   return sa.every((v, i) => v === sb[i]);
+}
+
+// Rough, honest metric — % of the movement library your current equipment unlocks.
+function computeAccessPercent(equip) {
+  if (!EXERCISES.length) return 0;
+  const eligible = EXERCISES.filter(e => hasEquip(equip, e.equip)).length;
+  return Math.round((eligible / EXERCISES.length) * 100);
+}
+
+// ─── Plate inventory + bar-loading hint ────────────────────────────────────
+
+function platePickerHtml() {
+  const inv = Store.state.plateInventory;
+  const rows = PLATE_SIZES.map(size => {
+    const ironCount = inv.iron[size] || 0;
+    const bumperCount = inv.bumper[size] || 0;
+    return `<div class="plate-row">
+      <div class="plate-size">${size}<span class="plate-unit">lb</span></div>
+      <div class="plate-col">
+        <div class="plate-col-label">Iron</div>
+        <div class="plate-stepper">
+          <button class="stepper-btn" onclick="App.adjustPlate('iron', ${size}, -1)">−</button>
+          <div class="stepper-val">${ironCount}</div>
+          <button class="stepper-btn" onclick="App.adjustPlate('iron', ${size}, 1)">+</button>
+        </div>
+      </div>
+      <div class="plate-col">
+        <div class="plate-col-label">Rubber</div>
+        <div class="plate-stepper">
+          <button class="stepper-btn" onclick="App.adjustPlate('bumper', ${size}, -1)">−</button>
+          <div class="stepper-val">${bumperCount}</div>
+          <button class="stepper-btn" onclick="App.adjustPlate('bumper', ${size}, 1)">+</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="plate-list">${rows}</div>`;
+}
+
+// Total plates owned at a size (iron + rubber pooled — either loads the same weight).
+function platesOwnedAtSize(size) {
+  const inv = Store.state.plateInventory;
+  return (inv.iron[size] || 0) + (inv.bumper[size] || 0);
+}
+
+function plateLoadout(targetWeight) {
+  const perSide = Math.round(((targetWeight - STANDARD_BAR_WEIGHT) / 2) * 10) / 10;
+  if (perSide <= 0) return null;
+  if (!PLATE_SIZES.some(s => platesOwnedAtSize(s) > 0)) return null;
+
+  let remaining = perSide;
+  const picks = [];
+  for (const size of PLATE_SIZES) {
+    const usablePerSide = Math.floor(platesOwnedAtSize(size) / 2);
+    let take = 0;
+    while (take < usablePerSide && remaining >= size - 0.05) { take++; remaining -= size; }
+    if (take > 0) picks.push(`${take}×${size}`);
+  }
+  remaining = Math.round(remaining * 10) / 10;
+  if (remaining > 0.05) {
+    return picks.length
+      ? `${picks.join(' + ')} per side — short ${remaining} lb/side`
+      : `Not enough plates for ${perSide} lb/side`;
+  }
+  return picks.length ? `${picks.join(' + ')} per side` : 'Bar only';
+}
+
+function plateLoadoutLine(targetWeight) {
+  if (!Store.state.equipment.includes('barbell')) return '';
+  const line = plateLoadout(targetWeight);
+  return line ? `<div class="plate-loadout">${line}</div>` : '';
 }
 
 function renderOnboarding() {
@@ -157,9 +264,16 @@ function renderOnboarding() {
 }
 
 function renderEquipmentTab() {
+  const hasBarbell = Store.state.equipment.includes('barbell');
+  const plateSection = hasBarbell ? `<div class="equip-group">
+    <div class="equip-group-label">Plate Inventory</div>
+    <div class="section-sub" style="padding:0 0 var(--space-2)">Total plates you own, both sides combined — used to suggest a bar loading during Skill work.</div>
+    ${platePickerHtml()}
+  </div>` : '';
   return `<div class="section-heading">Equipment</div>
   <div class="section-sub">Turn off anything you don't have. Changes apply to your next session.</div>
   ${equipmentPickerHtml()}
+  ${plateSection}
   <div class="settings-block">
     <div class="settings-row" onclick="App.toggleSound()">
       <span>${Store.state.soundOn ? ICON.sound : ICON.muted}</span>
@@ -374,6 +488,7 @@ function renderSkillBody(skill) {
         <div class="weight-value">${UI.skillWeight}<span class="unit"> lb</span></div>
         <button class="stepper-btn" onclick="App.adjustWeight(1)">+</button>
       </div>
+      ${plateLoadoutLine(UI.skillWeight)}
       ${rest}
       <button class="btn btn-primary btn-block" style="margin-top:auto" ${UI.skillResting ? 'disabled' : ''} onclick="App.completeSet()">${isLast ? 'Finish Skill' : 'Complete Set'}</button>
     </div>`;
@@ -734,6 +849,11 @@ const App = {
   },
   setAllEquip(on) {
     Store.state.equipment = on ? ALL_EQUIPMENT.slice() : [];
+    Store.save(); render();
+  },
+  adjustPlate(type, size, delta) {
+    const inv = Store.state.plateInventory[type];
+    inv[size] = Math.max(0, (inv[size] || 0) + delta);
     Store.save(); render();
   },
   toggleSound() {

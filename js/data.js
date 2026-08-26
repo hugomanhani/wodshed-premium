@@ -51,6 +51,10 @@ const EQUIPMENT_GROUPS = [
 
 const ALL_EQUIPMENT = EQUIPMENT_GROUPS.flatMap(g => g.items.map(i => i.id));
 
+// Plate sizes (lb) offered for the per-size iron/rubber inventory in Equipment.
+const PLATE_SIZES = [45, 35, 25, 15, 10, 5, 2.5];
+const STANDARD_BAR_WEIGHT = 45;
+
 const EQUIPMENT_PRESETS = {
   bodyweight: { label: 'Bodyweight Only', desc: 'Nothing — travel, hotel rooms, anywhere', items: [] },
   mygarage: { label: 'My Garage', desc: 'Rack, rings, kettlebell, barbell, jump rope, PVC pipe, yoga mat', items: ['rack', 'rings', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'] },

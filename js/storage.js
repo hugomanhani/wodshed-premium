@@ -29,6 +29,7 @@ function defaultState() {
     lastPatternIndex: {},   // focus -> index into rotation pointer (deliberate sub-focus rotation)
     execState: null,        // in-progress section snapshot, so a reload mid-set doesn't lose the clock
     soundOn: true,
+    plateInventory: { iron: {}, bumper: {} }, // size (lb, e.g. "45") -> total plates owned, that type
   };
 }
 
