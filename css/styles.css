@@ -156,7 +156,8 @@ button { font-family: var(--font); }
 .section-icon { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--color-neutral-800); color: var(--color-neutral-400); }
 .section-icon.done { background: var(--color-accent-800); color: var(--color-accent-100); }
 .section-body { flex: 1; min-width: 0; }
-.section-title { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+.section-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-500); margin-bottom: 3px; }
+.section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
 .section-meta { font-size: 12px; color: var(--color-neutral-500); line-height: 1.4; }
 .section-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .icon-btn-sm { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-surface-2); color: var(--color-neutral-400); border: none; cursor: pointer; flex-shrink: 0; }
@@ -170,7 +171,9 @@ button { font-family: var(--font); }
 .banner-sub { font-size: 12px; color: var(--color-neutral-300); }
 
 .exec-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4); }
-.exec-header .kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-neutral-500); display: flex; align-items: center; }
+.exec-header-center { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.exec-header .kicker { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-neutral-500); display: flex; align-items: center; }
+.exec-type { font-size: 15px; font-weight: 700; letter-spacing: 0.03em; display: flex; align-items: center; white-space: nowrap; }
 
 .exec-body { flex: 1; display: flex; flex-direction: column; align-items: center; padding: var(--space-2) var(--space-6) var(--space-6); gap: var(--space-4); }
 

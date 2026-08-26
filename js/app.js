@@ -289,17 +289,25 @@ function renderEquipmentTab() {
 
 // ─── Section copy + rough duration estimate ───────────────────────────────
 
+// The specific workout TYPE (AMRAP, EMOM, a lift name, Tabata...) is the
+// headline; the bucket it lives in (Skill/WOD/Core) is just a small kicker
+// above it — that's what you're actually about to do, so it should read first.
 function sectionInfo(section, plan) {
   if (section === 'warmup') {
-    return { title: 'Warm-Up', meta: `2 Rounds · ${plan.warmup.moves.map(m => exerciseById(m).name).join(', ')}` };
+    return { kicker: null, title: 'Warm-Up', meta: `2 Rounds · ${plan.warmup.moves.map(m => exerciseById(m).name).join(', ')}` };
   }
   if (section === 'skill') {
-    return { title: 'Skill' + (plan.skill.liftName ? ' · ' + plan.skill.liftName : ''), meta: skillMetaLine(plan.skill) };
+    const s = plan.skill;
+    const title = s.shape === 'A' ? (s.liftName || 'Skill') : s.shape === 'B' ? 'EMOM' : 'Superset';
+    return { kicker: 'SKILL', title, meta: skillMetaLine(s) };
   }
   if (section === 'wod') {
-    return { title: 'WOD · ' + (plan.isBenchmark ? plan.benchmarkName : plan.wod.label), meta: `${plan.wod.badge} · ${plan.wod.movements}` };
+    const title = plan.isBenchmark ? plan.benchmarkName : plan.wod.label;
+    return { kicker: plan.isBenchmark ? 'BENCHMARK' : 'WOD', title, meta: `${plan.wod.badge} · ${plan.wod.movements}` };
   }
-  return { title: 'Core', meta: coreMetaLine(plan.core) };
+  const shape = plan.core.shape;
+  const title = shape === 'tabata' ? 'Tabata' : shape === 'holds' ? 'Holds' : 'Straight Rounds';
+  return { kicker: 'CORE', title, meta: coreMetaLine(plan.core) };
 }
 
 function skillMetaLine(skill) {
@@ -383,7 +391,7 @@ function renderToday() {
 function sectionCardHtml(section, plan) {
   const done = plan.completed[section];
   const rating = plan.ratings[section];
-  const { title, meta } = sectionInfo(section, plan);
+  const { kicker, title, meta } = sectionInfo(section, plan);
   const icon = done ? ICON.check : ICON.play;
   const iconCls = done ? 'section-icon done' : 'section-icon';
   const trailing = done
@@ -395,6 +403,7 @@ function sectionCardHtml(section, plan) {
   return `<div class="section-card ${done ? 'disabled' : ''}" onclick="${done ? '' : `App.enterExec('${section}')`}">
     <div class="${iconCls}">${icon}</div>
     <div class="section-body">
+      ${kicker ? `<div class="section-kicker">${kicker}</div>` : ''}
       <div class="section-title">${title}</div>
       <div class="section-meta">${meta}</div>
     </div>
@@ -404,10 +413,14 @@ function sectionCardHtml(section, plan) {
 
 // ─── Execution screens ───────────────────────────────────────────────────
 
-function execHeader(plan, title, infoKey) {
+function execHeader(plan, kicker, title, infoKey) {
+  const kickerHtml = kicker ? `<div class="kicker">${kicker}</div>` : '';
   return `<div class="exec-header">
     <button class="btn btn-icon btn-ghost" onclick="App.exitExec()">${ICON.back}</button>
-    <div class="kicker">${title}${infoKey ? infoBtn(infoKey) : ''}</div>
+    <div class="exec-header-center">
+      ${kickerHtml}
+      <div class="exec-type">${title}${infoKey ? infoBtn(infoKey) : ''}</div>
+    </div>
     <div style="width:44px"></div>
   </div>
   ${railHtml(plan, { compact: true, current: UI.execSection })}`;
@@ -430,17 +443,19 @@ function leadInHtml() {
 function renderExecScreen() {
   const plan = Store.state.today;
   const section = UI.execSection;
-  const title = SECTION_TITLES[section].toUpperCase();
+  const info = sectionInfo(section, plan);
+  const kicker = info.kicker;
+  const title = info.title.toUpperCase();
 
-  if (UI.leadIn !== null) return `<div class="screen no-nav">${execHeader(plan, title)}${leadInHtml()}</div>`;
+  if (UI.leadIn !== null) return `<div class="screen no-nav">${execHeader(plan, kicker, title)}${leadInHtml()}</div>`;
 
-  if (section === 'warmup') return `<div class="screen no-nav">${execHeader(plan, title)}${renderWarmupBody(plan.warmup)}</div>`;
-  if (section === 'skill') return `<div class="screen no-nav">${execHeader(plan, title)}${renderSkillBody(plan.skill)}</div>`;
+  if (section === 'warmup') return `<div class="screen no-nav">${execHeader(plan, kicker, title)}${renderWarmupBody(plan.warmup)}</div>`;
+  if (section === 'skill') return `<div class="screen no-nav">${execHeader(plan, kicker, title)}${renderSkillBody(plan.skill)}</div>`;
   if (section === 'wod') {
     const fmtKey = plan.wod.format.toUpperCase() === 'FORTIME' ? 'FORTIME' : plan.wod.format.toUpperCase();
-    return `<div class="screen no-nav">${execHeader(plan, title, fmtKey)}${renderWodBody(plan.wod, plan)}</div>`;
+    return `<div class="screen no-nav">${execHeader(plan, kicker, title, fmtKey)}${renderWodBody(plan.wod, plan)}</div>`;
   }
-  if (section === 'core') return `<div class="screen no-nav">${execHeader(plan, title)}${renderCoreBody(plan.core)}</div>`;
+  if (section === 'core') return `<div class="screen no-nav">${execHeader(plan, kicker, title)}${renderCoreBody(plan.core)}</div>`;
   return '';
 }
 

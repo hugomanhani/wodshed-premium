@@ -57,7 +57,7 @@ const STANDARD_BAR_WEIGHT = 45;
 
 // Starting equipment for a first-time install — a typical garage setup.
 // No other built-in presets: users build their own from the Equipment tab.
-const DEFAULT_EQUIPMENT = ['rack', 'rings', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'];
+const DEFAULT_EQUIPMENT = ['rack', 'rings', 'pullupbar', 'kettlebell', 'barbell', 'jumprope', 'pvc', 'yogamat'];
 
 const FOCUSES = ['strength', 'gymnastics', 'weightlifting', 'accessory', 'conditioning'];
 const FOCUS_LABELS = {
