@@ -20,7 +20,6 @@ const ICON = {
 const SECTION_TITLES = { warmup: 'Warm-Up', skill: 'Skill', wod: 'WOD', core: 'Core' };
 const RATING_LABEL = { easy: 'Easy', right: 'Just Right', hard: 'Too Hard' };
 const RATING_TAG_CLASS = { easy: 'tag-good', right: 'tag-neutral', hard: 'tag-warn' };
-const FOCUS_ACCENT = { strength: 'violet', weightlifting: 'gold', gymnastics: 'teal', accessory: 'blue', conditioning: 'coral' };
 
 const UI = {
   screen: 'boot', tab: 'today', execSection: null, timer: null, timerKind: null, dialog: null, leadIn: null,
@@ -180,7 +179,7 @@ function renderToday() {
         <div class="date-label">${dateStr}</div>
         <h1>Today</h1>
       </div>
-      <span class="tag tag-focus-${FOCUS_ACCENT[plan.focus]}">${FOCUS_LABELS[plan.focus].toUpperCase()} FOCUS</span>
+      <span class="tag tag-focus-${plan.focus}">${FOCUS_LABELS[plan.focus].toUpperCase()} FOCUS</span>
     </div>
     <div class="progress-row">${segs}</div>
     <div style="padding:0 var(--space-4) var(--space-4)">
@@ -504,7 +503,7 @@ function renderHistory() {
     return `<div class="card history-item">
       <div class="history-top">
         <div class="history-date">${entry.date}</div>
-        <span class="tag tag-focus-${FOCUS_ACCENT[entry.focus]}">${FOCUS_LABELS[entry.focus].toUpperCase()}</span>
+        <span class="tag tag-focus-${entry.focus}">${FOCUS_LABELS[entry.focus].toUpperCase()}</span>
       </div>
       <div class="history-line">${entry.wodBadge} · ${entry.wodMovements}</div>
       <div class="rating-chips">${chips}</div>
