@@ -150,7 +150,7 @@ button { font-family: var(--font); }
 
 .card-list { display: flex; flex-direction: column; gap: var(--space-3); padding: 0 var(--space-4); }
 .card { background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
-.section-card { display: flex; align-items: center; gap: var(--space-4); cursor: pointer; border: 1px solid transparent; }
+.section-card { display: flex; align-items: center; gap: var(--space-4); cursor: pointer; background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); transition: background .12s; }
 .section-card.disabled { opacity: 0.55; cursor: default; }
 .section-card:active:not(.disabled) { background: var(--color-surface-2); }
 .section-icon { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--color-neutral-800); color: var(--color-neutral-400); }
